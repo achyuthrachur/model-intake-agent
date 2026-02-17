@@ -5,6 +5,7 @@ import { Plus, Trash2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { INTAKE_SCHEMA, type FieldDefinition, type SectionSchema } from '@/lib/intake-schema';
+import { REQUIRED_FIELDS } from '@/lib/constants';
 import { useIntakeStore } from '@/stores/intake-store';
 import type { IntakeFormState, AssumptionRow, LimitationRow, ReferenceRow } from '@/types';
 
@@ -122,13 +123,14 @@ function SectionFields({ schema }: SectionFieldsProps) {
       const fieldKey = `${sectionKey}.${field.name}`;
       const pulsing = isFieldPulsing(field.name);
       const currentValue = sectionData[field.name];
+      const isRequired = REQUIRED_FIELDS.has(fieldKey);
 
       switch (field.type) {
         // ---- TEXT ----
         case 'text': {
           return (
             <div key={fieldKey} className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{field.label}</label>
+              <label className="text-sm font-medium text-foreground">{field.label}{isRequired && <span className="text-destructive"> *</span>}</label>
               <div className={cn(pulsing && 'field-pulse', 'rounded-md')}>
                 <Input
                   value={(currentValue as string) ?? ''}
@@ -144,7 +146,7 @@ function SectionFields({ schema }: SectionFieldsProps) {
         case 'textarea': {
           return (
             <div key={fieldKey} className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{field.label}</label>
+              <label className="text-sm font-medium text-foreground">{field.label}{isRequired && <span className="text-destructive"> *</span>}</label>
               <div className={cn(pulsing && 'field-pulse', 'rounded-md')}>
                 <Textarea
                   value={(currentValue as string) ?? ''}
@@ -161,7 +163,7 @@ function SectionFields({ schema }: SectionFieldsProps) {
         case 'select': {
           return (
             <div key={fieldKey} className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{field.label}</label>
+              <label className="text-sm font-medium text-foreground">{field.label}{isRequired && <span className="text-destructive"> *</span>}</label>
               <div className={cn(pulsing && 'field-pulse', 'rounded-md')}>
                 <Select
                   value={(currentValue as string) ?? ''}
@@ -187,7 +189,7 @@ function SectionFields({ schema }: SectionFieldsProps) {
         case 'date': {
           return (
             <div key={fieldKey} className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{field.label}</label>
+              <label className="text-sm font-medium text-foreground">{field.label}{isRequired && <span className="text-destructive"> *</span>}</label>
               <div className={cn(pulsing && 'field-pulse', 'rounded-md')}>
                 <Input
                   type="date"
@@ -213,7 +215,7 @@ function SectionFields({ schema }: SectionFieldsProps) {
 
           return (
             <div key={fieldKey} className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{field.label}</label>
+              <label className="text-sm font-medium text-foreground">{field.label}{isRequired && <span className="text-destructive"> *</span>}</label>
               <div className={cn(pulsing && 'field-pulse', 'rounded-md p-2 border border-input')}>
                 <div className="flex flex-wrap gap-2">
                   {field.options?.map((option) => {
@@ -293,7 +295,7 @@ function SectionFields({ schema }: SectionFieldsProps) {
 
           return (
             <div key={fieldKey} className="space-y-2">
-              <label className="text-sm font-medium text-foreground">{field.label}</label>
+              <label className="text-sm font-medium text-foreground">{field.label}{isRequired && <span className="text-destructive"> *</span>}</label>
               <div className={cn(pulsing && 'field-pulse', 'rounded-md')}>
                 {rows.length > 0 && (
                   <div className="overflow-x-auto rounded-md border border-border">

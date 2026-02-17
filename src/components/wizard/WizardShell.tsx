@@ -1,11 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
+import { STEP1_REQUIRED_FIELDS } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { StepIntake } from '@/components/wizard/StepIntake';
 import { StepUpload } from '@/components/wizard/StepUpload';
 import { StepGenerate } from '@/components/wizard/StepGenerate';
-import { Check, ArrowLeft, ArrowRight } from 'lucide-react';
+import { SettingsPanel } from '@/components/wizard/SettingsPanel';
+import { Check, ArrowLeft, ArrowRight, Settings, AlertTriangle } from 'lucide-react';
+import type { IntakeFormState } from '@/types';
 
 interface StepDef {
   number: 1 | 2 | 3;
@@ -21,14 +25,56 @@ const STEPS: StepDef[] = [
 export function WizardShell() {
   const currentStep = useIntakeStore((s) => s.currentStep);
   const setStep = useIntakeStore((s) => s.setStep);
+  const formData = useIntakeStore((s) => s.formData);
+  const getCompletionPercentage = useIntakeStore((s) => s.getCompletionPercentage);
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [validationWarning, setValidationWarning] = useState<string | null>(null);
 
   const handleBack = () => {
+    setValidationWarning(null);
     if (currentStep > 1) {
       setStep((currentStep - 1) as 1 | 2 | 3);
     }
   };
 
   const handleContinue = () => {
+    setValidationWarning(null);
+
+    // Step 1 → 2: check required fields
+    if (currentStep === 1) {
+      const missing: string[] = [];
+      for (const path of STEP1_REQUIRED_FIELDS) {
+        const [section, field] = path.split('.');
+        const sectionData = formData[section as keyof IntakeFormState] as unknown as Record<string, unknown>;
+        const value = sectionData?.[field];
+        const filled = Array.isArray(value)
+          ? value.length > 0
+          : typeof value === 'string' && value.trim() !== '';
+        if (!filled) {
+          missing.push(field.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()));
+        }
+      }
+
+      if (missing.length > 0) {
+        setValidationWarning(
+          `Please fill required fields before continuing: ${missing.join(', ')}`,
+        );
+        return;
+      }
+
+      // Soft warning if completion is very low
+      const completion = getCompletionPercentage();
+      if (completion < 5) {
+        setValidationWarning(
+          `Only ${completion}% of fields are filled. You can continue, but consider providing more information first.`,
+        );
+        // Allow proceeding on second click
+        setTimeout(() => setValidationWarning(null), 5000);
+        // Actually proceed — the warning is informational
+      }
+    }
+
     if (currentStep < 3) {
       setStep((currentStep + 1) as 1 | 2 | 3);
     }
@@ -88,8 +134,29 @@ export function WizardShell() {
               </div>
             );
           })}
+
+          {/* Settings button */}
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => setSettingsOpen(true)}
+            className="ml-4 text-muted-foreground hover:text-foreground"
+            aria-label="Settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
       </div>
+
+      {/* Validation warning */}
+      {validationWarning && (
+        <div className="shrink-0 border-b border-[var(--color-crowe-amber-core)]/30 bg-[var(--color-crowe-amber-core)]/5 px-6 py-2">
+          <div className="mx-auto flex max-w-3xl items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--color-crowe-amber-dark)]" />
+            <p className="text-xs text-foreground">{validationWarning}</p>
+          </div>
+        </div>
+      )}
 
       {/* Step content */}
       <div className="min-h-0 flex-1">
@@ -121,6 +188,9 @@ export function WizardShell() {
           </Button>
         </div>
       </div>
+
+      {/* Settings drawer */}
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

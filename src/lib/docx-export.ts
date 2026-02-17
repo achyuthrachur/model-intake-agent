@@ -14,9 +14,10 @@ import {
 } from 'docx';
 import { saveAs } from 'file-saver';
 import type { GeneratedReport } from '@/types';
+import { DOCX_CROWE_INDIGO, DOCX_CROWE_SECONDARY_TEXT, DOCX_CROWE_MUTED, DOCX_CROWE_BORDER, DOCX_CROWE_STRIPE } from './constants';
 
-const CROWE_INDIGO = '011E41';
-const CROWE_AMBER = 'F5A800';
+const CROWE_INDIGO = DOCX_CROWE_INDIGO;
+// DOCX_CROWE_AMBER available via import if needed
 
 function createTitlePage(bankName: string, modelName: string): Paragraph[] {
   return [
@@ -53,7 +54,7 @@ function createTitlePage(bankName: string, modelName: string): Paragraph[] {
         new TextRun({
           text: modelName,
           size: 28,
-          color: '4F4F4F',
+          color: DOCX_CROWE_SECONDARY_TEXT,
           font: 'Helvetica Neue',
         }),
       ],
@@ -68,7 +69,7 @@ function createTitlePage(bankName: string, modelName: string): Paragraph[] {
             day: 'numeric',
           }),
           size: 22,
-          color: '828282',
+          color: DOCX_CROWE_MUTED,
           font: 'Helvetica Neue',
         }),
       ],
@@ -126,12 +127,12 @@ function createDocxTable(headers: string[], rows: string[][]): Table {
                   ],
                 }),
               ],
-              shading: { fill: rowIdx % 2 === 0 ? 'FFFFFF' : 'F1F5F9' },
+              shading: { fill: rowIdx % 2 === 0 ? 'FFFFFF' : DOCX_CROWE_STRIPE },
               borders: {
-                top: { style: BorderStyle.SINGLE, size: 1, color: 'E0E0E0' },
-                bottom: { style: BorderStyle.SINGLE, size: 1, color: 'E0E0E0' },
-                left: { style: BorderStyle.SINGLE, size: 1, color: 'E0E0E0' },
-                right: { style: BorderStyle.SINGLE, size: 1, color: 'E0E0E0' },
+                top: { style: BorderStyle.SINGLE, size: 1, color: DOCX_CROWE_BORDER },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: DOCX_CROWE_BORDER },
+                left: { style: BorderStyle.SINGLE, size: 1, color: DOCX_CROWE_BORDER },
+                right: { style: BorderStyle.SINGLE, size: 1, color: DOCX_CROWE_BORDER },
               },
             })
         ),

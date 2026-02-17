@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, FileText } from 'lucide-react';
+import { Loader2, FileText, RefreshCw } from 'lucide-react';
 import type { AIModel } from '@/types';
 
 const TOTAL_SECTIONS = 8;
@@ -81,7 +81,7 @@ export function StepGenerate() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-6">
       {/* Model Selector */}
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium text-foreground">AI Model</label>
@@ -152,9 +152,20 @@ export function StepGenerate() {
 
       {/* Error */}
       {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
-          <p className="text-sm font-medium text-destructive">Generation Error</p>
-          <p className="text-xs text-muted-foreground">{error}</p>
+        <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <div className="flex flex-1 flex-col gap-1">
+            <p className="text-sm font-medium text-destructive">Generation Error</p>
+            <p className="text-xs text-muted-foreground">{error}</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={handleGenerate}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Retry
+          </Button>
         </div>
       )}
 

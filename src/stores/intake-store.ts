@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
   ChatMessage,
   FieldUpdate,
@@ -233,219 +234,262 @@ interface IntakeStore {
   setReportStatus: (status: 'idle' | 'generating' | 'complete' | 'error') => void;
   currentGeneratingSection: number;
   setCurrentGeneratingSection: (n: number) => void;
+
+  // Session
+  resetSession: () => void;
 }
 
 // ============================================================
-// Zustand Store
+// Zustand Store with localStorage persistence
 // ============================================================
 
-export const useIntakeStore = create<IntakeStore>((set, get) => ({
-  // --------------------------------------------------------
-  // Config
-  // --------------------------------------------------------
-  n8nBaseUrl: 'http://localhost:5678',
-  setN8nBaseUrl: (url: string) => set({ n8nBaseUrl: url }),
+export const useIntakeStore = create<IntakeStore>()(
+  persist(
+    (set, get) => ({
+      // --------------------------------------------------------
+      // Config
+      // --------------------------------------------------------
+      n8nBaseUrl: 'http://localhost:5678',
+      setN8nBaseUrl: (url: string) => set({ n8nBaseUrl: url }),
 
-  openaiApiKey: '',
-  setApiKey: (key: string) => set({ openaiApiKey: key }),
+      openaiApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY ?? '',
+      setApiKey: (key: string) => set({ openaiApiKey: key }),
 
-  selectedModel: 'gpt-4o' as AIModel,
-  setSelectedModel: (model: AIModel) => set({ selectedModel: model }),
+      selectedModel: 'gpt-4o' as AIModel,
+      setSelectedModel: (model: AIModel) => set({ selectedModel: model }),
 
-  bankName: '',
-  setBankName: (name: string) => set({ bankName: name }),
+      bankName: '',
+      setBankName: (name: string) => set({ bankName: name }),
 
-  useMockData: true,
-  setUseMockData: (v: boolean) => set({ useMockData: v }),
+      useMockData: true,
+      setUseMockData: (v: boolean) => set({ useMockData: v }),
 
-  // --------------------------------------------------------
-  // Wizard
-  // --------------------------------------------------------
-  currentStep: 1 as 1 | 2 | 3,
-  setStep: (step: 1 | 2 | 3) => set({ currentStep: step }),
+      // --------------------------------------------------------
+      // Wizard
+      // --------------------------------------------------------
+      currentStep: 1 as 1 | 2 | 3,
+      setStep: (step: 1 | 2 | 3) => set({ currentStep: step }),
 
-  // --------------------------------------------------------
-  // Chat
-  // --------------------------------------------------------
-  messages: [],
-  addMessage: (msg: ChatMessage) =>
-    set((state) => ({ messages: [...state.messages, msg] })),
-  clearMessages: () => set({ messages: [] }),
+      // --------------------------------------------------------
+      // Chat
+      // --------------------------------------------------------
+      messages: [],
+      addMessage: (msg: ChatMessage) =>
+        set((state) => ({ messages: [...state.messages, msg] })),
+      clearMessages: () => set({ messages: [] }),
 
-  isStreaming: false,
-  setIsStreaming: (v: boolean) => set({ isStreaming: v }),
+      isStreaming: false,
+      setIsStreaming: (v: boolean) => set({ isStreaming: v }),
 
-  // --------------------------------------------------------
-  // Form
-  // --------------------------------------------------------
-  formData: createInitialFormState(),
+      // --------------------------------------------------------
+      // Form
+      // --------------------------------------------------------
+      formData: createInitialFormState(),
 
-  updateField: (section: keyof IntakeFormState, field: string, value: unknown) =>
-    set((state) => ({
-      formData: {
-        ...state.formData,
-        [section]: {
-          ...state.formData[section],
-          [field]: value,
-        },
+      updateField: (section: keyof IntakeFormState, field: string, value: unknown) =>
+        set((state) => ({
+          formData: {
+            ...state.formData,
+            [section]: {
+              ...state.formData[section],
+              [field]: value,
+            },
+          },
+        })),
+
+      applyFieldUpdates: (updates: FieldUpdate[]) => {
+        const store = get();
+
+        for (const update of updates) {
+          // Map snake_case section name to camelCase store key
+          const sectionKey = SECTION_MAP[update.section] ?? (update.section as keyof IntakeFormState);
+          // Map snake_case field name to camelCase
+          const fieldKey = snakeToCamel(update.field);
+
+          if (update.action === 'add_row') {
+            store.addTableRow(sectionKey, fieldKey, update.value as unknown as AssumptionRow | LimitationRow | ReferenceRow);
+          } else {
+            // Default action is "set"
+            store.updateField(sectionKey, fieldKey, update.value);
+          }
+
+          // Mark the field as recently updated for highlight animation
+          store.markFieldUpdated(`${sectionKey}.${fieldKey}`);
+        }
       },
-    })),
 
-  applyFieldUpdates: (updates: FieldUpdate[]) => {
-    const store = get();
+      addTableRow: (section: keyof IntakeFormState, field: string, row: AssumptionRow | LimitationRow | ReferenceRow) =>
+        set((state) => {
+          const sectionData = state.formData[section];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const currentRows = (sectionData as any)[field];
+          const rowsArray = Array.isArray(currentRows) ? currentRows : [];
 
-    for (const update of updates) {
-      // Map snake_case section name to camelCase store key
-      const sectionKey = SECTION_MAP[update.section] ?? (update.section as keyof IntakeFormState);
-      // Map snake_case field name to camelCase
-      const fieldKey = snakeToCamel(update.field);
+          return {
+            formData: {
+              ...state.formData,
+              [section]: {
+                ...sectionData,
+                [field]: [...rowsArray, row],
+              },
+            },
+          };
+        }),
 
-      if (update.action === 'add_row') {
-        store.addTableRow(sectionKey, fieldKey, update.value as unknown as AssumptionRow | LimitationRow | ReferenceRow);
-      } else {
-        // Default action is "set"
-        store.updateField(sectionKey, fieldKey, update.value);
-      }
+      removeTableRow: (section: keyof IntakeFormState, field: string, rowId: string) =>
+        set((state) => {
+          const sectionData = state.formData[section];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const currentRows = (sectionData as any)[field];
+          const rowsArray = Array.isArray(currentRows) ? currentRows : [];
 
-      // Mark the field as recently updated for highlight animation
-      store.markFieldUpdated(`${sectionKey}.${fieldKey}`);
-    }
-  },
+          return {
+            formData: {
+              ...state.formData,
+              [section]: {
+                ...sectionData,
+                [field]: rowsArray.filter((r: { id: string }) => r.id !== rowId),
+              },
+            },
+          };
+        }),
 
-  addTableRow: (section: keyof IntakeFormState, field: string, row: AssumptionRow | LimitationRow | ReferenceRow) =>
-    set((state) => {
-      const sectionData = state.formData[section];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const currentRows = (sectionData as any)[field];
-      const rowsArray = Array.isArray(currentRows) ? currentRows : [];
+      getCompletionPercentage: (): number => {
+        const { formData } = get();
+        let totalFields = 0;
+        let filledFields = 0;
 
-      return {
-        formData: {
-          ...state.formData,
-          [section]: {
-            ...sectionData,
-            [field]: [...rowsArray, row],
-          },
-        },
-      };
-    }),
+        for (const sectionKey of Object.keys(formData) as (keyof IntakeFormState)[]) {
+          const section = formData[sectionKey];
 
-  removeTableRow: (section: keyof IntakeFormState, field: string, rowId: string) =>
-    set((state) => {
-      const sectionData = state.formData[section];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const currentRows = (sectionData as any)[field];
-      const rowsArray = Array.isArray(currentRows) ? currentRows : [];
+          for (const [, value] of Object.entries(section)) {
+            totalFields++;
 
-      return {
-        formData: {
-          ...state.formData,
-          [section]: {
-            ...sectionData,
-            [field]: rowsArray.filter((r: { id: string }) => r.id !== rowId),
-          },
-        },
-      };
-    }),
-
-  getCompletionPercentage: (): number => {
-    const { formData } = get();
-    let totalFields = 0;
-    let filledFields = 0;
-
-    for (const sectionKey of Object.keys(formData) as (keyof IntakeFormState)[]) {
-      const section = formData[sectionKey];
-
-      for (const [, value] of Object.entries(section)) {
-        totalFields++;
-
-        if (Array.isArray(value)) {
-          // For arrays (businessUnits, assumptions, limitations, references)
-          if (value.length > 0) {
-            filledFields++;
-          }
-        } else if (typeof value === 'string') {
-          if (value.trim() !== '') {
-            filledFields++;
+            if (Array.isArray(value)) {
+              if (value.length > 0) {
+                filledFields++;
+              }
+            } else if (typeof value === 'string') {
+              if (value.trim() !== '') {
+                filledFields++;
+              }
+            }
           }
         }
-      }
-    }
 
-    if (totalFields === 0) return 0;
-    return Math.round((filledFields / totalFields) * 100);
-  },
+        if (totalFields === 0) return 0;
+        return Math.round((filledFields / totalFields) * 100);
+      },
 
-  getUnfilledFields: (): string[] => {
-    const { formData } = get();
-    const unfilled: string[] = [];
+      getUnfilledFields: (): string[] => {
+        const { formData } = get();
+        const unfilled: string[] = [];
 
-    for (const sectionKey of Object.keys(formData) as (keyof IntakeFormState)[]) {
-      const section = formData[sectionKey];
+        for (const sectionKey of Object.keys(formData) as (keyof IntakeFormState)[]) {
+          const section = formData[sectionKey];
 
-      for (const [fieldKey, value] of Object.entries(section)) {
-        const isFilled = Array.isArray(value)
-          ? value.length > 0
-          : typeof value === 'string' && value.trim() !== '';
+          for (const [fieldKey, value] of Object.entries(section)) {
+            const isFilled = Array.isArray(value)
+              ? value.length > 0
+              : typeof value === 'string' && value.trim() !== '';
 
-        if (!isFilled) {
-          unfilled.push(`${sectionKey}.${fieldKey}`);
+            if (!isFilled) {
+              unfilled.push(`${sectionKey}.${fieldKey}`);
+            }
+          }
         }
-      }
-    }
 
-    return unfilled;
-  },
+        return unfilled;
+      },
 
-  recentlyUpdatedFields: new Set<string>(),
+      recentlyUpdatedFields: new Set<string>(),
 
-  markFieldUpdated: (fieldKey: string) =>
-    set((state) => {
-      const updated = new Set(state.recentlyUpdatedFields);
-      updated.add(fieldKey);
-      return { recentlyUpdatedFields: updated };
+      markFieldUpdated: (fieldKey: string) =>
+        set((state) => {
+          const updated = new Set(state.recentlyUpdatedFields);
+          updated.add(fieldKey);
+          return { recentlyUpdatedFields: updated };
+        }),
+
+      clearRecentUpdates: () => set({ recentlyUpdatedFields: new Set<string>() }),
+
+      // --------------------------------------------------------
+      // Documents
+      // --------------------------------------------------------
+      uploadedFiles: [],
+
+      addUploadedFile: (file: UploadedFile) =>
+        set((state) => ({ uploadedFiles: [...state.uploadedFiles, file] })),
+
+      updateFileStatus: (fileId: string, status: UploadedFile['status'], progress?: number) =>
+        set((state) => ({
+          uploadedFiles: state.uploadedFiles.map((f) =>
+            f.id === fileId
+              ? { ...f, status, ...(progress !== undefined ? { progress } : {}) }
+              : f
+          ),
+        })),
+
+      removeUploadedFile: (fileId: string) =>
+        set((state) => ({
+          uploadedFiles: state.uploadedFiles.filter((f) => f.id !== fileId),
+        })),
+
+      parsedDocuments: [],
+      setParsedDocuments: (docs: ParsedDocument[]) => set({ parsedDocuments: docs }),
+
+      coverageAnalysis: null,
+      setCoverageAnalysis: (analysis: CoverageAnalysis) => set({ coverageAnalysis: analysis }),
+
+      // --------------------------------------------------------
+      // Report
+      // --------------------------------------------------------
+      generatedReport: null,
+      setGeneratedReport: (report: GeneratedReport) => set({ generatedReport: report }),
+
+      reportStatus: 'idle' as const,
+      setReportStatus: (status: 'idle' | 'generating' | 'complete' | 'error') =>
+        set({ reportStatus: status }),
+
+      currentGeneratingSection: 0,
+      setCurrentGeneratingSection: (n: number) => set({ currentGeneratingSection: n }),
+
+      // --------------------------------------------------------
+      // Session reset
+      // --------------------------------------------------------
+      resetSession: () =>
+        set({
+          currentStep: 1,
+          messages: [],
+          formData: createInitialFormState(),
+          uploadedFiles: [],
+          parsedDocuments: [],
+          coverageAnalysis: null,
+          generatedReport: null,
+          reportStatus: 'idle',
+          currentGeneratingSection: 0,
+          recentlyUpdatedFields: new Set<string>(),
+        }),
     }),
-
-  clearRecentUpdates: () => set({ recentlyUpdatedFields: new Set<string>() }),
-
-  // --------------------------------------------------------
-  // Documents
-  // --------------------------------------------------------
-  uploadedFiles: [],
-
-  addUploadedFile: (file: UploadedFile) =>
-    set((state) => ({ uploadedFiles: [...state.uploadedFiles, file] })),
-
-  updateFileStatus: (fileId: string, status: UploadedFile['status'], progress?: number) =>
-    set((state) => ({
-      uploadedFiles: state.uploadedFiles.map((f) =>
-        f.id === fileId
-          ? { ...f, status, ...(progress !== undefined ? { progress } : {}) }
-          : f
-      ),
-    })),
-
-  removeUploadedFile: (fileId: string) =>
-    set((state) => ({
-      uploadedFiles: state.uploadedFiles.filter((f) => f.id !== fileId),
-    })),
-
-  parsedDocuments: [],
-  setParsedDocuments: (docs: ParsedDocument[]) => set({ parsedDocuments: docs }),
-
-  coverageAnalysis: null,
-  setCoverageAnalysis: (analysis: CoverageAnalysis) => set({ coverageAnalysis: analysis }),
-
-  // --------------------------------------------------------
-  // Report
-  // --------------------------------------------------------
-  generatedReport: null,
-  setGeneratedReport: (report: GeneratedReport) => set({ generatedReport: report }),
-
-  reportStatus: 'idle' as const,
-  setReportStatus: (status: 'idle' | 'generating' | 'complete' | 'error') =>
-    set({ reportStatus: status }),
-
-  currentGeneratingSection: 0,
-  setCurrentGeneratingSection: (n: number) => set({ currentGeneratingSection: n }),
-}));
+    {
+      name: 'model-intake-store',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        // Persist only what matters for session recovery
+        n8nBaseUrl: state.n8nBaseUrl,
+        openaiApiKey: state.openaiApiKey,
+        selectedModel: state.selectedModel,
+        bankName: state.bankName,
+        useMockData: state.useMockData,
+        currentStep: state.currentStep,
+        messages: state.messages,
+        formData: state.formData,
+        // Exclude: isStreaming, recentlyUpdatedFields, uploadedFiles (contain File objects),
+        //          reportStatus (transient), currentGeneratingSection (transient)
+        parsedDocuments: state.parsedDocuments,
+        coverageAnalysis: state.coverageAnalysis,
+        generatedReport: state.generatedReport,
+      }),
+    },
+  ),
+);

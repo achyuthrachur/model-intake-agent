@@ -23,6 +23,7 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
+  AlertTriangle,
 } from 'lucide-react';
 import type { AIModel } from '@/types';
 
@@ -143,6 +144,13 @@ export default function LandingPage() {
                 </button>
               </div>
             </div>
+
+            {!store.useMockData && store.openaiApiKey && !store.openaiApiKey.startsWith('sk-') && (
+              <p className="flex items-center gap-1 text-xs text-destructive">
+                <AlertTriangle className="h-3 w-3" />
+                API key should start with &quot;sk-&quot;
+              </p>
+            )}
 
             {/* Model + Mock mode row */}
             <div className="flex items-end gap-4">

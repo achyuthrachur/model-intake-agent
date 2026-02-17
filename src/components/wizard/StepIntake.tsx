@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { sendChatMessage } from '@/lib/n8n-client';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { IntakeFormPanel } from '@/components/intake-form/IntakeFormPanel';
+import { Button } from '@/components/ui/button';
+import { RefreshCw } from 'lucide-react';
 import type { ChatMessage } from '@/types';
 
 const INITIAL_GREETING: ChatMessage = {
@@ -18,6 +20,7 @@ const INITIAL_GREETING: ChatMessage = {
 
 export function StepIntake() {
   const store = useIntakeStore();
+  const lastUserMessageRef = useRef<string | null>(null);
 
   // Add initial greeting on mount if no messages exist
   useEffect(() => {
@@ -37,6 +40,7 @@ export function StepIntake() {
         timestamp: Date.now(),
       };
       store.addMessage(userMessage);
+      lastUserMessageRef.current = text;
 
       // 2. Set streaming state
       store.setIsStreaming(true);
@@ -72,11 +76,11 @@ export function StepIntake() {
           store.applyFieldUpdates(response.fieldUpdates);
         }
       } catch (error) {
-        // Add error message as system message
+        // Add error message as system message with retry hint
         const errorMessage: ChatMessage = {
           id: `error-${Date.now()}`,
           role: 'system',
-          content: `Error: ${error instanceof Error ? error.message : 'Failed to get AI response. Please try again.'}`,
+          content: `Error: ${error instanceof Error ? error.message : 'Failed to get AI response.'} Use the retry button below to try again.`,
           timestamp: Date.now(),
         };
         store.addMessage(errorMessage);
@@ -101,6 +105,15 @@ export function StepIntake() {
     ],
   );
 
+  const lastMessageIsError =
+    store.messages.length > 0 && store.messages[store.messages.length - 1].role === 'system';
+
+  const handleRetry = () => {
+    if (lastUserMessageRef.current) {
+      handleSend(lastUserMessageRef.current);
+    }
+  };
+
   return (
     <div className="grid h-[calc(100vh-140px)] grid-cols-[55fr_45fr] gap-0">
       {/* Left panel: Chat */}
@@ -108,6 +121,14 @@ export function StepIntake() {
         <div className="min-h-0 flex-1">
           <ChatWindow messages={store.messages} isStreaming={store.isStreaming} />
         </div>
+        {lastMessageIsError && !store.isStreaming && (
+          <div className="flex justify-center border-t border-border bg-destructive/5 py-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleRetry}>
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry Last Message
+            </Button>
+          </div>
+        )}
         <ChatInput onSend={handleSend} disabled={store.isStreaming} />
       </div>
 

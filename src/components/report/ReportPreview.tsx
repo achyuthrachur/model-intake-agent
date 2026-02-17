@@ -50,14 +50,14 @@ function renderTable(content: string): React.ReactNode {
 
   return (
     <>
-      {preText && <p className="mb-3 text-sm leading-relaxed text-[#333333]">{preText}</p>}
-      <table className="w-full border-collapse border border-[#BDBDBD] text-sm">
+      {preText && <p className="mb-3 text-sm leading-relaxed text-[var(--color-crowe-indigo-dark)] dark:text-foreground">{preText}</p>}
+      <table className="w-full border-collapse border border-border text-sm">
         <thead>
-          <tr className="bg-[#011E41]">
+          <tr className="bg-primary">
             {headerRow.map((cell, i) => (
               <th
                 key={i}
-                className="border border-[#BDBDBD] px-3 py-2 text-left text-xs font-semibold text-white"
+                className="border border-border px-3 py-2 text-left text-xs font-semibold text-white"
               >
                 {cell}
               </th>
@@ -68,15 +68,15 @@ function renderTable(content: string): React.ReactNode {
           {dataRows.map((row, rowIdx) => (
             <tr
               key={rowIdx}
-              className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-[#F1F5F9]'}
+              className={rowIdx % 2 === 0 ? 'bg-card' : 'bg-muted'}
             >
               {row.map((cell, cellIdx) => (
                 <td
                   key={cellIdx}
-                  className="border border-[#BDBDBD] px-3 py-2 text-[#333333]"
+                  className="border border-border px-3 py-2 text-[var(--color-crowe-indigo-dark)] dark:text-foreground"
                 >
                   {cell === '[Information not provided]' ? (
-                    <span className="italic text-[#828282]">{cell}</span>
+                    <span className="italic text-muted-foreground">{cell}</span>
                   ) : (
                     cell
                   )}
@@ -86,7 +86,7 @@ function renderTable(content: string): React.ReactNode {
           ))}
         </tbody>
       </table>
-      {postText && <p className="mt-3 text-sm leading-relaxed text-[#333333]">{postText}</p>}
+      {postText && <p className="mt-3 text-sm leading-relaxed text-[var(--color-crowe-indigo-dark)] dark:text-foreground">{postText}</p>}
     </>
   );
 }
@@ -107,7 +107,7 @@ function renderTextContent(content: string): React.ReactNode {
     // Bold text markers
     const parts = trimmed.split(/(\*\*[^*]+\*\*)/g);
     return (
-      <p key={idx} className="text-sm leading-relaxed text-[#333333]">
+      <p key={idx} className="text-sm leading-relaxed text-[var(--color-crowe-indigo-dark)] dark:text-foreground">
         {parts.map((part, pIdx) => {
           if (part.startsWith('**') && part.endsWith('**')) {
             return (
@@ -129,7 +129,7 @@ function SectionBlock({ section, isFirst }: { section: ReportSection; isFirst: b
   return (
     <div className={isFirst ? '' : 'mt-8'}>
       <h2
-        className="mb-3 border-b border-[#BDBDBD] pb-2 text-base font-bold text-[#011E41]"
+        className="mb-3 border-b border-border pb-2 text-base font-bold text-primary"
         style={{ fontFamily: 'var(--font-display)' }}
       >
         {section.title}
@@ -146,11 +146,11 @@ export function ReportPreview({ report }: ReportPreviewProps) {
   const bodySections = report.sections.filter((s) => s.id !== 'model_summary');
 
   return (
-    <div className="rounded-lg border border-border bg-white p-8 shadow-lg dark:border-[#BDBDBD]">
+    <div className="rounded-lg border border-border bg-card p-8 shadow-lg dark:border-border/50">
       {/* Bank Name Header */}
       <div className="mb-2 text-center">
         <p
-          className="text-lg font-bold tracking-wide text-[#011E41]"
+          className="text-lg font-bold tracking-wide text-primary"
           style={{ fontFamily: 'var(--font-display)' }}
         >
           {report.bankName}
@@ -160,15 +160,15 @@ export function ReportPreview({ report }: ReportPreviewProps) {
       {/* Title */}
       <div className="mb-8 text-center">
         <h1
-          className="text-2xl font-bold tracking-tight text-[#011E41]"
+          className="text-2xl font-bold tracking-tight text-primary"
           style={{ fontFamily: 'var(--font-display)' }}
         >
           MODEL DOCUMENTATION
         </h1>
-        <p className="mt-1 text-sm text-[#828282]">
+        <p className="mt-1 text-sm text-muted-foreground">
           {report.modelName}
         </p>
-        <p className="mt-0.5 text-xs text-[#828282]">
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Generated {new Date(report.generatedAt).toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'long',
@@ -178,13 +178,13 @@ export function ReportPreview({ report }: ReportPreviewProps) {
       </div>
 
       {/* Divider */}
-      <hr className="mb-8 border-[#011E41]/20" />
+      <hr className="mb-8 border-primary/20" />
 
       {/* Model Summary Table */}
       {modelSummarySection && (
         <div className="mb-8">
           <h2
-            className="mb-3 border-b border-[#BDBDBD] pb-2 text-base font-bold text-[#011E41]"
+            className="mb-3 border-b border-border pb-2 text-base font-bold text-primary"
             style={{ fontFamily: 'var(--font-display)' }}
           >
             Model Summary
@@ -202,13 +202,13 @@ export function ReportPreview({ report }: ReportPreviewProps) {
 
       {/* Generation Notes */}
       {report.generationNotes.length > 0 && (
-        <div className="mt-10 rounded border border-[#BDBDBD] bg-[#F1F5F9] p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#828282]">
+        <div className="mt-10 rounded border border-border bg-muted p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Generation Notes
           </p>
           <ul className="flex flex-col gap-1">
             {report.generationNotes.map((note, idx) => (
-              <li key={idx} className="text-xs text-[#4F4F4F]">
+              <li key={idx} className="text-xs text-foreground">
                 {note}
               </li>
             ))}

@@ -7,7 +7,7 @@ import { DropZone } from '@/components/upload/DropZone';
 import { FileList } from '@/components/upload/FileList';
 import { CoverageAnalysisGrid } from '@/components/upload/CoverageAnalysis';
 import { Button } from '@/components/ui/button';
-import { Loader2, FileSearch, AlertTriangle } from 'lucide-react';
+import { Loader2, FileSearch, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export function StepUpload() {
   const store = useIntakeStore();
@@ -88,7 +88,7 @@ export function StepUpload() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-6">
       {/* Drop Zone */}
       <DropZone onFilesAdded={handleFilesAdded} />
 
@@ -125,10 +125,19 @@ export function StepUpload() {
       {processingError && (
         <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-1 flex-col gap-1">
             <p className="text-sm font-medium text-foreground">Processing Error</p>
             <p className="text-xs text-muted-foreground">{processingError}</p>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={handleProcessDocuments}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Retry
+          </Button>
         </div>
       )}
 

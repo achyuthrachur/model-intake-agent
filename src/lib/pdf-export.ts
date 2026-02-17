@@ -1,10 +1,11 @@
 import jsPDF from 'jspdf';
 import type { GeneratedReport } from '@/types';
+import { PDF_INDIGO, PDF_AMBER, PDF_TEXT, PDF_MUTED } from './constants';
 
-const INDIGO_R = 1, INDIGO_G = 30, INDIGO_B = 65;
-const AMBER_R = 245, AMBER_G = 168, AMBER_B = 0;
-const TEXT_R = 51, TEXT_G = 51, TEXT_B = 51;
-const MUTED_R = 130, MUTED_G = 130, MUTED_B = 130;
+const INDIGO_R = PDF_INDIGO.r, INDIGO_G = PDF_INDIGO.g, INDIGO_B = PDF_INDIGO.b;
+const AMBER_R = PDF_AMBER.r, AMBER_G = PDF_AMBER.g, AMBER_B = PDF_AMBER.b;
+const TEXT_R = PDF_TEXT.r, TEXT_G = PDF_TEXT.g, TEXT_B = PDF_TEXT.b;
+const MUTED_R = PDF_MUTED.r, MUTED_G = PDF_MUTED.g, MUTED_B = PDF_MUTED.b;
 
 const PAGE_W = 210;
 const MARGIN = 20;
