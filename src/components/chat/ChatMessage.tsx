@@ -24,14 +24,15 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
   return (
     <div
+      data-chat-message
       className={`flex gap-3 px-4 py-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
     >
       {/* Avatar */}
       <div
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
           isUser
-            ? 'bg-[var(--color-crowe-indigo-dark)] text-white'
-            : 'bg-[var(--color-crowe-teal)]/15 text-[var(--color-crowe-teal)]'
+            ? 'border-[var(--color-crowe-indigo-dark)] bg-[var(--color-crowe-indigo-dark)] text-white'
+            : 'border-[var(--color-crowe-teal)]/25 bg-[var(--color-crowe-teal)]/15 text-[var(--color-crowe-teal)]'
         }`}
       >
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
@@ -42,10 +43,10 @@ export function ChatMessage({ message }: ChatMessageProps) {
         className={`flex max-w-[80%] flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}
       >
         <div
-          className={`rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
+          className={`rounded-2xl border px-4 py-2.5 text-sm leading-relaxed ${
             isUser
-              ? 'bg-[var(--color-crowe-amber-core)]/10 text-foreground'
-              : 'border border-border bg-card text-foreground'
+              ? 'border-[var(--color-crowe-amber-core)]/35 bg-[var(--color-crowe-amber-core)]/12 text-foreground'
+              : 'border-border/75 bg-card/90 text-foreground shadow-[0_12px_26px_-22px_rgba(1,30,65,0.7)]'
           }`}
         >
           <p className="whitespace-pre-wrap">{message.content}</p>

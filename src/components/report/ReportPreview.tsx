@@ -50,10 +50,10 @@ function renderTable(content: string): React.ReactNode {
 
   return (
     <>
-      {preText && <p className="mb-3 text-sm leading-relaxed text-[var(--color-crowe-indigo-dark)] dark:text-foreground">{preText}</p>}
+      {preText && <p className="mb-3 text-sm leading-relaxed text-foreground">{preText}</p>}
       <table className="w-full border-collapse border border-border text-sm">
         <thead>
-          <tr className="bg-primary">
+          <tr className="bg-primary/95">
             {headerRow.map((cell, i) => (
               <th
                 key={i}
@@ -73,7 +73,7 @@ function renderTable(content: string): React.ReactNode {
               {row.map((cell, cellIdx) => (
                 <td
                   key={cellIdx}
-                  className="border border-border px-3 py-2 text-[var(--color-crowe-indigo-dark)] dark:text-foreground"
+                  className="border border-border px-3 py-2 text-foreground"
                 >
                   {cell === '[Information not provided]' ? (
                     <span className="italic text-muted-foreground">{cell}</span>
@@ -86,7 +86,7 @@ function renderTable(content: string): React.ReactNode {
           ))}
         </tbody>
       </table>
-      {postText && <p className="mt-3 text-sm leading-relaxed text-[var(--color-crowe-indigo-dark)] dark:text-foreground">{postText}</p>}
+      {postText && <p className="mt-3 text-sm leading-relaxed text-foreground">{postText}</p>}
     </>
   );
 }
@@ -107,7 +107,7 @@ function renderTextContent(content: string): React.ReactNode {
     // Bold text markers
     const parts = trimmed.split(/(\*\*[^*]+\*\*)/g);
     return (
-      <p key={idx} className="text-sm leading-relaxed text-[var(--color-crowe-indigo-dark)] dark:text-foreground">
+      <p key={idx} className="text-sm leading-relaxed text-foreground">
         {parts.map((part, pIdx) => {
           if (part.startsWith('**') && part.endsWith('**')) {
             return (
@@ -146,7 +146,7 @@ export function ReportPreview({ report }: ReportPreviewProps) {
   const bodySections = report.sections.filter((s) => s.id !== 'model_summary');
 
   return (
-    <div className="rounded-lg border border-border bg-card p-8 shadow-lg dark:border-border/50">
+    <div className="rounded-xl border border-border/75 bg-background/65 p-6 md:p-8">
       {/* Bank Name Header */}
       <div className="mb-2 text-center">
         <p
@@ -178,7 +178,7 @@ export function ReportPreview({ report }: ReportPreviewProps) {
       </div>
 
       {/* Divider */}
-      <hr className="mb-8 border-primary/20" />
+      <hr className="mb-8 border-primary/25" />
 
       {/* Model Summary Table */}
       {modelSummarySection && (
@@ -202,7 +202,7 @@ export function ReportPreview({ report }: ReportPreviewProps) {
 
       {/* Generation Notes */}
       {report.generationNotes.length > 0 && (
-        <div className="mt-10 rounded border border-border bg-muted p-4">
+        <div className="mt-10 rounded-xl border border-border/75 bg-muted/55 p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Generation Notes
           </p>

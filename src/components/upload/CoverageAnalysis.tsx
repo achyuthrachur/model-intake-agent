@@ -49,7 +49,7 @@ export function CoverageAnalysisGrid({ coverage }: CoverageAnalysisGridProps) {
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">
           Coverage Analysis
         </h3>
@@ -70,14 +70,14 @@ export function CoverageAnalysisGrid({ coverage }: CoverageAnalysisGridProps) {
       </div>
 
       {/* Grid */}
-      <div className="rounded-lg border border-border">
-        <div className="grid grid-cols-[1fr_auto_1fr] gap-x-4 border-b border-border bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground">
+      <div className="overflow-hidden rounded-xl border border-border/75">
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-x-4 border-b border-border/70 bg-muted/55 px-4 py-2 text-xs font-semibold text-muted-foreground">
           <span>Section</span>
           <span>Status</span>
           <span>Source Documents</span>
         </div>
 
-        <div className="divide-y divide-border">
+        <div className="divide-y divide-border/70">
           {TEMPLATE_SECTIONS.map((section) => {
             const entry = coverage.overallCoverage[section.id];
             const status = entry?.status ?? 'gap';
@@ -86,7 +86,7 @@ export function CoverageAnalysisGrid({ coverage }: CoverageAnalysisGridProps) {
             return (
               <div
                 key={section.id}
-                className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4 px-4 py-2.5"
+                className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4 px-4 py-2.5 transition-colors hover:bg-accent/35"
               >
                 <div className="flex items-center gap-2">
                   <StatusIcon status={status} />
@@ -106,7 +106,7 @@ export function CoverageAnalysisGrid({ coverage }: CoverageAnalysisGridProps) {
 
       {/* Gap warnings banner */}
       {gapCount > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-[var(--color-crowe-amber-core)]/30 bg-[var(--color-crowe-amber-core)]/5 px-4 py-3">
+        <div className="flex items-start gap-3 rounded-xl border border-[var(--color-crowe-amber-core)]/30 bg-[var(--color-crowe-amber-core)]/8 px-4 py-3">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-crowe-amber-dark)]" />
           <div className="flex flex-col gap-1">
             <p className="text-sm font-medium text-foreground">

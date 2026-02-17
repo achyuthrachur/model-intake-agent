@@ -54,10 +54,10 @@ export function FileList({ files, onRemove }: FileListProps) {
       {files.map((file) => (
         <div
           key={file.id}
-          className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3"
+          className="interactive-lift flex flex-col gap-2 rounded-xl border border-border/75 bg-card/90 p-3"
         >
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/80">
               <FileText className="h-4 w-4 text-muted-foreground" />
             </div>
 

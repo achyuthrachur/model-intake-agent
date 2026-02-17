@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { generateReport } from '@/lib/api-client';
+import { useAnimeStagger } from '@/lib/anime-motion';
 import { ReportPreview } from '@/components/report/ReportPreview';
 import { ExportControls } from '@/components/report/ExportControls';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ export function StepGenerate() {
   const store = useIntakeStore();
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const isGenerating = store.reportStatus === 'generating';
   const isComplete = store.reportStatus === 'complete';
@@ -38,6 +40,12 @@ export function StepGenerate() {
       intervalRef.current = null;
     }
   }, []);
+
+  useAnimeStagger(rootRef, [store.reportStatus, store.currentGeneratingSection, error], '[data-reveal]', {
+    delay: 60,
+    duration: 440,
+    y: 12,
+  });
 
   const handleGenerate = async () => {
     setError(null);
@@ -79,9 +87,12 @@ export function StepGenerate() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-6">
+    <div
+      ref={rootRef}
+      className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 md:gap-5 md:px-6 md:py-6"
+    >
       {/* Model Selector */}
-      <div className="flex flex-col gap-1.5">
+      <div data-reveal className="surface-card flex flex-col gap-1.5 rounded-2xl p-4 md:p-5">
         <label className="text-sm font-medium text-foreground">AI Model</label>
         <Select
           value={store.selectedModel}
@@ -101,6 +112,7 @@ export function StepGenerate() {
       {/* Generate Button */}
       {!isComplete && (
         <Button
+          data-reveal
           onClick={handleGenerate}
           disabled={isGenerating}
           className="gap-2 bg-[var(--color-crowe-amber-core)] text-[var(--color-crowe-indigo-dark)] hover:bg-[var(--color-crowe-amber-bright)] disabled:opacity-40"
@@ -121,7 +133,7 @@ export function StepGenerate() {
 
       {/* Progress Bar */}
       {isGenerating && (
-        <div className="flex flex-col gap-2">
+        <div data-reveal className="surface-card flex flex-col gap-2 rounded-2xl p-4 md:p-5">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
               Generating Section {store.currentGeneratingSection} of {TOTAL_SECTIONS}
@@ -134,7 +146,7 @@ export function StepGenerate() {
 
       {/* Loading Skeleton */}
       {isGenerating && (
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
+        <div data-reveal className="surface-card flex flex-col gap-4 rounded-2xl p-6">
           <div className="h-6 w-2/5 animate-pulse rounded bg-muted" />
           <div className="h-4 w-1/4 animate-pulse rounded bg-muted" />
           <div className="my-2 h-px bg-border" />
@@ -150,7 +162,10 @@ export function StepGenerate() {
 
       {/* Error */}
       {error && (
-        <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+        <div
+          data-reveal
+          className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/6 px-4 py-3"
+        >
           <div className="flex flex-1 flex-col gap-1">
             <p className="text-sm font-medium text-destructive">Generation Error</p>
             <p className="text-xs text-muted-foreground">{error}</p>
@@ -170,8 +185,12 @@ export function StepGenerate() {
       {/* Report Preview + Export Controls */}
       {isComplete && store.generatedReport && (
         <>
-          <ExportControls report={store.generatedReport} />
-          <ReportPreview report={store.generatedReport} />
+          <div data-reveal className="surface-card rounded-2xl p-4 md:p-5">
+            <ExportControls report={store.generatedReport} />
+          </div>
+          <div data-reveal className="surface-card rounded-2xl p-4 md:p-5">
+            <ReportPreview report={store.generatedReport} />
+          </div>
         </>
       )}
     </div>

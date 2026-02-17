@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { processDocuments } from '@/lib/api-client';
+import { useAnimeStagger } from '@/lib/anime-motion';
 import { DropZone } from '@/components/upload/DropZone';
 import { FileList } from '@/components/upload/FileList';
 import { CoverageAnalysisGrid } from '@/components/upload/CoverageAnalysis';
@@ -20,6 +21,7 @@ export function StepUpload() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const autoProcessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const hasFiles = uploadedFiles.length > 0;
   const hasCoverage = coverageAnalysis !== null;
@@ -101,6 +103,12 @@ export function StepUpload() {
     return () => clearAutoProcessTimer();
   }, [clearAutoProcessTimer]);
 
+  useAnimeStagger(rootRef, [uploadedFiles.length, isProcessing, hasCoverage], '[data-reveal]', {
+    delay: 60,
+    duration: 430,
+    y: 12,
+  });
+
   const handleFilesAdded = (files: File[]) => {
     // Reset previous processing outputs and rerun on latest upload set.
     setParsedDocuments([]);
@@ -130,21 +138,26 @@ export function StepUpload() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-6">
+    <div
+      ref={rootRef}
+      className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-4 md:gap-5 md:px-6 md:py-6"
+    >
       {/* Drop Zone */}
-      <DropZone onFilesAdded={handleFilesAdded} />
+      <div data-reveal className="surface-card rounded-2xl p-4 md:p-5">
+        <DropZone onFilesAdded={handleFilesAdded} />
+      </div>
 
       {/* File List */}
       {hasFiles && (
-        <FileList
-          files={uploadedFiles}
-          onRemove={(id) => removeUploadedFile(id)}
-        />
+        <div data-reveal className="surface-card rounded-2xl p-4 md:p-5">
+          <FileList files={uploadedFiles} onRemove={(id) => removeUploadedFile(id)} />
+        </div>
       )}
 
       {/* Process Documents Button */}
       {hasFiles && !hasCoverage && (
         <Button
+          data-reveal
           onClick={handleProcessDocuments}
           disabled={isProcessing || uploadedFiles.length === 0}
           className="gap-2 bg-[var(--color-crowe-amber-core)] text-[var(--color-crowe-indigo-dark)] hover:bg-[var(--color-crowe-amber-bright)] disabled:opacity-40"
@@ -165,7 +178,10 @@ export function StepUpload() {
 
       {/* Processing Error */}
       {processingError && (
-        <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+        <div
+          data-reveal
+          className="flex items-start gap-3 rounded-xl border border-destructive/35 bg-destructive/8 px-4 py-3"
+        >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="flex flex-1 flex-col gap-1">
             <p className="text-sm font-medium text-foreground">Processing Error</p>
@@ -185,9 +201,9 @@ export function StepUpload() {
 
       {/* Loading Skeleton */}
       {isProcessing && (
-        <div className="flex flex-col gap-3">
+        <div data-reveal className="surface-card flex flex-col gap-3 rounded-2xl p-4 md:p-5">
           <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
-          <div className="flex flex-col gap-2 rounded-lg border border-border p-4">
+          <div className="flex flex-col gap-2 rounded-lg border border-border/70 p-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="flex items-center gap-4">
                 <div className="h-4 w-4 animate-pulse rounded-full bg-muted" />
@@ -201,12 +217,14 @@ export function StepUpload() {
 
       {/* Coverage Analysis Grid */}
       {hasCoverage && coverageAnalysis && (
-        <CoverageAnalysisGrid coverage={coverageAnalysis} />
+        <div data-reveal className="surface-card rounded-2xl p-4 md:p-5">
+          <CoverageAnalysisGrid coverage={coverageAnalysis} />
+        </div>
       )}
 
       {/* Gap warnings section */}
       {hasCoverage && coverageAnalysis && coverageAnalysis.gaps.length > 0 && (
-        <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+        <div data-reveal className="surface-muted rounded-xl px-4 py-3">
           <p className="text-xs text-muted-foreground">
             Gaps identified above will be flagged in the generated report. You can address
             them by uploading additional documents or providing information during the

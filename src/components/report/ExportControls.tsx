@@ -87,7 +87,7 @@ export function ExportControls({ report }: ExportControlsProps) {
       </Button>
 
       {copied && (
-        <Badge className="bg-[var(--color-crowe-teal)]/10 text-[var(--color-crowe-teal-dark)] border-[var(--color-crowe-teal)]/20">
+        <Badge className="elegant-in bg-[var(--color-crowe-teal)]/10 text-[var(--color-crowe-teal-dark)] border-[var(--color-crowe-teal)]/20">
           Copied to clipboard
         </Badge>
       )}

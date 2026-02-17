@@ -33,20 +33,20 @@ export function DropZone({ onFilesAdded }: DropZoneProps) {
     <div
       {...getRootProps()}
       className={cn(
-        'flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-6 py-10 transition-colors',
+        'interactive-lift flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-10 transition-colors',
         isDragActive
-          ? 'border-[var(--color-crowe-amber-core)] bg-[var(--color-crowe-amber-core)]/5'
-          : 'border-border bg-muted/30 hover:border-muted-foreground/40 hover:bg-muted/50',
+          ? 'border-[var(--color-crowe-amber-core)] bg-[var(--color-crowe-amber-core)]/10'
+          : 'border-border/70 bg-[var(--surface-muted)] hover:border-[var(--color-crowe-indigo-bright)]/45 hover:bg-accent/55',
       )}
     >
       <input {...getInputProps()} />
 
       <div
         className={cn(
-          'flex h-12 w-12 items-center justify-center rounded-full transition-colors',
+          'flex h-12 w-12 items-center justify-center rounded-full border transition-colors',
           isDragActive
-            ? 'bg-[var(--color-crowe-amber-core)]/10 text-[var(--color-crowe-amber-core)]'
-            : 'bg-muted text-muted-foreground',
+            ? 'border-[var(--color-crowe-amber-core)]/35 bg-[var(--color-crowe-amber-core)]/18 text-[var(--color-crowe-amber-dark)]'
+            : 'border-border/70 bg-muted text-muted-foreground',
         )}
       >
         <Upload className="h-6 w-6" />

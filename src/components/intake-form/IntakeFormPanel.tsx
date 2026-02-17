@@ -257,8 +257,8 @@ function SectionFields({ schema }: SectionFieldsProps) {
                         className={cn(
                           'inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors',
                           checked
-                            ? 'border-[#05AB8C] bg-[#05AB8C]/10 text-[#05AB8C]'
-                            : 'border-border bg-background text-muted-foreground hover:bg-accent',
+                            ? 'border-[#05AB8C] bg-[#05AB8C]/12 text-[#05AB8C]'
+                            : 'border-border/75 bg-background/80 text-muted-foreground hover:bg-accent/65',
                         )}
                       >
                         <input
@@ -340,10 +340,10 @@ function SectionFields({ schema }: SectionFieldsProps) {
               <label className="text-sm font-medium text-foreground">{field.label}{isRequired && <span className="text-destructive"> *</span>}</label>
               <div className={cn(pulsing && 'field-pulse', 'rounded-md')}>
                 {rows.length > 0 && (
-                  <div className="overflow-x-auto rounded-md border border-border">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
+                    <div className="overflow-x-auto rounded-md border border-border/75">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/55">
                           {columns.map((col) => (
                             <th
                               key={col.key}
@@ -359,7 +359,7 @@ function SectionFields({ schema }: SectionFieldsProps) {
                         {rows.map((row, rowIndex) => (
                           <tr
                             key={row.id ?? rowIndex}
-                            className="border-b last:border-b-0 hover:bg-muted/30"
+                            className="border-b border-border/70 last:border-b-0 hover:bg-accent/35"
                           >
                             {columns.map((col) => (
                               <td key={col.key} className="px-3 py-1.5">
@@ -456,7 +456,7 @@ export function IntakeFormPanel() {
   return (
     <div className="flex h-full flex-col">
       {/* ---- Header: completion + risk badge ---- */}
-      <div className="shrink-0 space-y-3 border-b border-border px-4 py-4">
+      <div className="shrink-0 space-y-3 border-b border-border/75 bg-muted/45 px-4 py-4">
         {/* Risk Rating badge */}
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">Intake Form</h2>
@@ -479,19 +479,8 @@ export function IntakeFormPanel() {
           </div>
           <Progress
             value={overallCompletion}
-            className="h-2 bg-muted"
-            style={
-              {
-                '--tw-progress-fill': '#F5A800',
-              } as React.CSSProperties
-            }
+            className="h-2 bg-muted [&_[data-slot=progress-indicator]]:bg-[var(--color-crowe-amber-core)]"
           />
-          {/* Override the indicator color to amber */}
-          <style>{`
-            [data-slot="progress"] [data-slot="progress-indicator"] {
-              background-color: #F5A800;
-            }
-          `}</style>
         </div>
       </div>
 

@@ -3,6 +3,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { sendChatMessage } from '@/lib/api-client';
+import { useAnimeStagger } from '@/lib/anime-motion';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { IntakeFormPanel } from '@/components/intake-form/IntakeFormPanel';
@@ -21,6 +22,13 @@ const INITIAL_GREETING: ChatMessage = {
 export function StepIntake() {
   const store = useIntakeStore();
   const lastUserMessageRef = useRef<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useAnimeStagger(rootRef, [store.messages.length, store.isStreaming], '[data-reveal]', {
+    delay: 60,
+    duration: 440,
+    y: 14,
+  });
 
   // Add initial greeting on mount if no messages exist
   useEffect(() => {
@@ -111,14 +119,17 @@ export function StepIntake() {
   };
 
   return (
-    <div className="grid h-[calc(100vh-140px)] grid-cols-[55fr_45fr] gap-0">
+    <div
+      ref={rootRef}
+      className="grid h-[calc(100vh-148px)] grid-cols-1 gap-3 px-3 py-3 lg:grid-cols-[54fr_46fr]"
+    >
       {/* Left panel: Chat */}
-      <div className="flex flex-col border-r border-border">
+      <div data-reveal className="surface-card flex min-h-0 flex-col overflow-hidden rounded-2xl">
         <div className="min-h-0 flex-1">
           <ChatWindow messages={store.messages} isStreaming={store.isStreaming} />
         </div>
         {lastMessageIsError && !store.isStreaming && (
-          <div className="flex justify-center border-t border-border bg-destructive/5 py-2">
+          <div className="flex justify-center border-t border-border/70 bg-destructive/6 py-2">
             <Button variant="outline" size="sm" className="gap-2" onClick={handleRetry}>
               <RefreshCw className="h-3.5 w-3.5" />
               Retry Last Message
@@ -129,7 +140,7 @@ export function StepIntake() {
       </div>
 
       {/* Right panel: Intake Form */}
-      <div className="min-h-0 overflow-auto">
+      <div data-reveal className="surface-card min-h-0 overflow-hidden rounded-2xl">
         <IntakeFormPanel />
       </div>
     </div>
