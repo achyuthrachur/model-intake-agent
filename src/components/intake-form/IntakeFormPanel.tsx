@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -104,7 +104,9 @@ function SectionFields({ schema }: SectionFieldsProps) {
   const updateField = useIntakeStore((s) => s.updateField);
   const addTableRow = useIntakeStore((s) => s.addTableRow);
   const removeTableRow = useIntakeStore((s) => s.removeTableRow);
+  const addManualEditSystemMessage = useIntakeStore((s) => s.addManualEditSystemMessage);
   const recentlyUpdatedFields = useIntakeStore((s) => s.recentlyUpdatedFields);
+  const dirtyFieldsRef = useRef<Set<string>>(new Set());
 
   const sectionKey = schema.id as keyof IntakeFormState;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -115,6 +117,19 @@ function SectionFields({ schema }: SectionFieldsProps) {
       return recentlyUpdatedFields.has(`${sectionKey}.${fieldName}`);
     },
     [recentlyUpdatedFields, sectionKey],
+  );
+
+  const markDirty = useCallback((key: string) => {
+    dirtyFieldsRef.current.add(key);
+  }, []);
+
+  const flushDirty = useCallback(
+    (key: string, fieldName: string, value: unknown) => {
+      if (!dirtyFieldsRef.current.has(key)) return;
+      dirtyFieldsRef.current.delete(key);
+      addManualEditSystemMessage(sectionKey, fieldName, value);
+    },
+    [addManualEditSystemMessage, sectionKey],
   );
 
   // --- Render a single field by type ---
@@ -135,7 +150,11 @@ function SectionFields({ schema }: SectionFieldsProps) {
                 <Input
                   value={(currentValue as string) ?? ''}
                   placeholder={field.placeholder}
-                  onChange={(e) => updateField(sectionKey, field.name, e.target.value)}
+                  onChange={(e) => {
+                    markDirty(field.name);
+                    updateField(sectionKey, field.name, e.target.value);
+                  }}
+                  onBlur={(e) => flushDirty(field.name, field.name, e.target.value)}
                 />
               </div>
             </div>
@@ -152,7 +171,11 @@ function SectionFields({ schema }: SectionFieldsProps) {
                   value={(currentValue as string) ?? ''}
                   placeholder={field.placeholder}
                   rows={3}
-                  onChange={(e) => updateField(sectionKey, field.name, e.target.value)}
+                  onChange={(e) => {
+                    markDirty(field.name);
+                    updateField(sectionKey, field.name, e.target.value);
+                  }}
+                  onBlur={(e) => flushDirty(field.name, field.name, e.target.value)}
                 />
               </div>
             </div>
@@ -167,7 +190,10 @@ function SectionFields({ schema }: SectionFieldsProps) {
               <div className={cn(pulsing && 'field-pulse', 'rounded-md')}>
                 <Select
                   value={(currentValue as string) ?? ''}
-                  onValueChange={(val) => updateField(sectionKey, field.name, val)}
+                  onValueChange={(val) => {
+                    updateField(sectionKey, field.name, val);
+                    addManualEditSystemMessage(sectionKey, field.name, val);
+                  }}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder={field.placeholder ?? 'Select...'} />
@@ -195,7 +221,11 @@ function SectionFields({ schema }: SectionFieldsProps) {
                   type="date"
                   value={(currentValue as string) ?? ''}
                   placeholder={field.placeholder}
-                  onChange={(e) => updateField(sectionKey, field.name, e.target.value)}
+                  onChange={(e) => {
+                    markDirty(field.name);
+                    updateField(sectionKey, field.name, e.target.value);
+                  }}
+                  onBlur={(e) => flushDirty(field.name, field.name, e.target.value)}
                 />
               </div>
             </div>
@@ -211,6 +241,7 @@ function SectionFields({ schema }: SectionFieldsProps) {
               ? selectedValues.filter((v) => v !== option)
               : [...selectedValues, option];
             updateField(sectionKey, field.name, next);
+            addManualEditSystemMessage(sectionKey, field.name, next);
           };
 
           return (
@@ -280,17 +311,28 @@ function SectionFields({ schema }: SectionFieldsProps) {
           const handleAddRow = () => {
             const newRow = createEmptyRow(columns);
             addTableRow(sectionKey, field.name, newRow);
+            addManualEditSystemMessage(
+              sectionKey,
+              field.name,
+              `Added row. Total rows: ${rows.length + 1}`,
+            );
           };
 
           const handleCellChange = (rowIndex: number, colKey: string, value: string) => {
             const updatedRows = rows.map((row, i) =>
               i === rowIndex ? { ...row, [colKey]: value } : row,
             );
+            markDirty(`${field.name}:${rowIndex}:${colKey}`);
             updateField(sectionKey, field.name, updatedRows);
           };
 
           const handleRemoveRow = (rowId: string) => {
             removeTableRow(sectionKey, field.name, rowId);
+            addManualEditSystemMessage(
+              sectionKey,
+              field.name,
+              `Removed row. Total rows: ${Math.max(rows.length - 1, 0)}`,
+            );
           };
 
           return (
@@ -325,6 +367,13 @@ function SectionFields({ schema }: SectionFieldsProps) {
                                   value={row[col.key] ?? ''}
                                   onChange={(e) =>
                                     handleCellChange(rowIndex, col.key, e.target.value)
+                                  }
+                                  onBlur={(e) =>
+                                    flushDirty(
+                                      `${field.name}:${rowIndex}:${col.key}`,
+                                      field.name,
+                                      `Updated row ${rowIndex + 1}, ${col.label}: ${e.target.value}`,
+                                    )
                                   }
                                   className="h-8 text-xs"
                                   placeholder={col.label}
@@ -366,7 +415,17 @@ function SectionFields({ schema }: SectionFieldsProps) {
           return null;
       }
     },
-    [sectionKey, sectionData, isFieldPulsing, updateField, addTableRow, removeTableRow],
+    [
+      sectionKey,
+      sectionData,
+      isFieldPulsing,
+      updateField,
+      addTableRow,
+      removeTableRow,
+      markDirty,
+      flushDirty,
+      addManualEditSystemMessage,
+    ],
   );
 
   return <div className="space-y-4 pb-2">{schema.fields.map(renderField)}</div>;

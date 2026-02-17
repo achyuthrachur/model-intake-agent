@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
   ChatMessage,
   FieldUpdate,
@@ -177,16 +176,34 @@ function snakeToCamel(str: string): string {
   return str.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
+function formatManualEditValue(value: unknown): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '[empty]';
+    return trimmed.length > 140 ? `${trimmed.slice(0, 137)}...` : trimmed;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    const formatted = JSON.stringify(value);
+    return formatted.length > 140 ? `${formatted.slice(0, 137)}...` : formatted;
+  }
+
+  if (value && typeof value === 'object') {
+    const formatted = JSON.stringify(value);
+    return formatted.length > 140 ? `${formatted.slice(0, 137)}...` : formatted;
+  }
+
+  if (value === null || value === undefined) return '[empty]';
+  return String(value);
+}
+
 // ============================================================
 // Store Interface
 // ============================================================
 
 interface IntakeStore {
   // Config
-  n8nBaseUrl: string;
-  setN8nBaseUrl: (url: string) => void;
-  openaiApiKey: string;
-  setApiKey: (key: string) => void;
   selectedModel: AIModel;
   setSelectedModel: (model: AIModel) => void;
   bankName: string;
@@ -201,6 +218,7 @@ interface IntakeStore {
   // Chat
   messages: ChatMessage[];
   addMessage: (msg: ChatMessage) => void;
+  addManualEditSystemMessage: (section: keyof IntakeFormState, field: string, value: unknown) => void;
   clearMessages: () => void;
   isStreaming: boolean;
   setIsStreaming: (v: boolean) => void;
@@ -225,7 +243,7 @@ interface IntakeStore {
   parsedDocuments: ParsedDocument[];
   setParsedDocuments: (docs: ParsedDocument[]) => void;
   coverageAnalysis: CoverageAnalysis | null;
-  setCoverageAnalysis: (analysis: CoverageAnalysis) => void;
+  setCoverageAnalysis: (analysis: CoverageAnalysis | null) => void;
 
   // Report
   generatedReport: GeneratedReport | null;
@@ -240,21 +258,13 @@ interface IntakeStore {
 }
 
 // ============================================================
-// Zustand Store with localStorage persistence
+// Zustand Store
 // ============================================================
 
-export const useIntakeStore = create<IntakeStore>()(
-  persist(
-    (set, get) => ({
+export const useIntakeStore = create<IntakeStore>()((set, get) => ({
       // --------------------------------------------------------
       // Config
       // --------------------------------------------------------
-      n8nBaseUrl: 'http://localhost:5678',
-      setN8nBaseUrl: (url: string) => set({ n8nBaseUrl: url }),
-
-      openaiApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY ?? '',
-      setApiKey: (key: string) => set({ openaiApiKey: key }),
-
       selectedModel: 'gpt-4o' as AIModel,
       setSelectedModel: (model: AIModel) => set({ selectedModel: model }),
 
@@ -276,6 +286,24 @@ export const useIntakeStore = create<IntakeStore>()(
       messages: [],
       addMessage: (msg: ChatMessage) =>
         set((state) => ({ messages: [...state.messages, msg] })),
+      addManualEditSystemMessage: (section: keyof IntakeFormState, field: string, value: unknown) =>
+        set((state) => {
+          const content = `Manual field edit: ${section}.${field} = ${formatManualEditValue(value)}`;
+          const lastMessage = state.messages[state.messages.length - 1];
+
+          if (lastMessage?.role === 'system' && lastMessage.content === content) {
+            return state;
+          }
+
+          const manualMessage: ChatMessage = {
+            id: `system-manual-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            role: 'system',
+            content,
+            timestamp: Date.now(),
+          };
+
+          return { messages: [...state.messages, manualMessage] };
+        }),
       clearMessages: () => set({ messages: [] }),
 
       isStreaming: false,
@@ -439,7 +467,7 @@ export const useIntakeStore = create<IntakeStore>()(
       setParsedDocuments: (docs: ParsedDocument[]) => set({ parsedDocuments: docs }),
 
       coverageAnalysis: null,
-      setCoverageAnalysis: (analysis: CoverageAnalysis) => set({ coverageAnalysis: analysis }),
+      setCoverageAnalysis: (analysis: CoverageAnalysis | null) => set({ coverageAnalysis: analysis }),
 
       // --------------------------------------------------------
       // Report
@@ -470,26 +498,4 @@ export const useIntakeStore = create<IntakeStore>()(
           currentGeneratingSection: 0,
           recentlyUpdatedFields: new Set<string>(),
         }),
-    }),
-    {
-      name: 'model-intake-store',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        // Persist only what matters for session recovery
-        n8nBaseUrl: state.n8nBaseUrl,
-        openaiApiKey: state.openaiApiKey,
-        selectedModel: state.selectedModel,
-        bankName: state.bankName,
-        useMockData: state.useMockData,
-        currentStep: state.currentStep,
-        messages: state.messages,
-        formData: state.formData,
-        // Exclude: isStreaming, recentlyUpdatedFields, uploadedFiles (contain File objects),
-        //          reportStatus (transient), currentGeneratingSection (transient)
-        parsedDocuments: state.parsedDocuments,
-        coverageAnalysis: state.coverageAnalysis,
-        generatedReport: state.generatedReport,
-      }),
-    },
-  ),
-);
+    }));

@@ -1,8 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useState, useRef, useCallback } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
-import { generateReport } from '@/lib/n8n-client';
+import { generateReport } from '@/lib/api-client';
 import { ReportPreview } from '@/components/report/ReportPreview';
 import { ExportControls } from '@/components/report/ExportControls';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ import {
 import { Loader2, FileText, RefreshCw } from 'lucide-react';
 import type { AIModel } from '@/types';
 
-const TOTAL_SECTIONS = 8;
+const TOTAL_SECTIONS = 7;
 
 export function StepGenerate() {
   const store = useIntakeStore();
@@ -55,8 +55,6 @@ export function StepGenerate() {
 
     try {
       const config = {
-        n8nBaseUrl: store.n8nBaseUrl,
-        openaiApiKey: store.openaiApiKey,
         selectedModel: store.selectedModel,
         useMockData: store.useMockData,
       };
@@ -179,3 +177,4 @@ export function StepGenerate() {
     </div>
   );
 }
+

@@ -227,8 +227,6 @@ export interface GeneratedReport {
 export type AIModel = 'gpt-4o' | 'gpt-4o-mini';
 
 export interface PortalConfig {
-  n8nBaseUrl: string;
-  openaiApiKey: string;
   selectedModel: AIModel;
   bankName: string;
   useMockData: boolean;

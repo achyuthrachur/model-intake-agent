@@ -1,8 +1,8 @@
-'use client';
+﻿'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
-import { processDocuments } from '@/lib/n8n-client';
+import { processDocuments } from '@/lib/api-client';
 import { DropZone } from '@/components/upload/DropZone';
 import { FileList } from '@/components/upload/FileList';
 import { CoverageAnalysisGrid } from '@/components/upload/CoverageAnalysis';
@@ -10,18 +10,106 @@ import { Button } from '@/components/ui/button';
 import { Loader2, FileSearch, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export function StepUpload() {
-  const store = useIntakeStore();
+  const uploadedFiles = useIntakeStore((s) => s.uploadedFiles);
+  const coverageAnalysis = useIntakeStore((s) => s.coverageAnalysis);
+  const addUploadedFile = useIntakeStore((s) => s.addUploadedFile);
+  const updateFileStatus = useIntakeStore((s) => s.updateFileStatus);
+  const removeUploadedFile = useIntakeStore((s) => s.removeUploadedFile);
+  const setParsedDocuments = useIntakeStore((s) => s.setParsedDocuments);
+  const setCoverageAnalysis = useIntakeStore((s) => s.setCoverageAnalysis);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
+  const autoProcessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const hasFiles = store.uploadedFiles.length > 0;
-  const hasCoverage = store.coverageAnalysis !== null;
+  const hasFiles = uploadedFiles.length > 0;
+  const hasCoverage = coverageAnalysis !== null;
+
+  const clearAutoProcessTimer = useCallback(() => {
+    if (autoProcessTimeoutRef.current) {
+      clearTimeout(autoProcessTimeoutRef.current);
+      autoProcessTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleProcessDocuments = useCallback(async () => {
+    if (isProcessing) return;
+    const latestState = useIntakeStore.getState();
+    const currentFiles = latestState.uploadedFiles;
+    if (currentFiles.length === 0) return;
+
+    setIsProcessing(true);
+    setProcessingError(null);
+
+    // Set all files to processing status
+    for (const file of currentFiles) {
+      updateFileStatus(file.id, 'processing');
+    }
+
+    try {
+      const config = {
+        selectedModel: latestState.selectedModel,
+        useMockData: latestState.useMockData,
+      };
+
+      const rawFiles = currentFiles.map((f) => f.file);
+      const result = await processDocuments(config, rawFiles);
+
+      // Store parsed documents
+      setParsedDocuments(result.documents);
+
+      // Store coverage analysis
+      setCoverageAnalysis({
+        overallCoverage: result.overallCoverage,
+        gaps: result.gaps,
+      });
+
+      // Mark files parsed when returned by backend, otherwise keep as error for visibility.
+      const parsedNames = new Set(result.documents.map((d) => d.filename.toLowerCase()));
+      for (const file of currentFiles) {
+        if (parsedNames.has(file.name.toLowerCase())) {
+          updateFileStatus(file.id, 'parsed', 100);
+        } else {
+          updateFileStatus(file.id, 'error', 100);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Document processing failed';
+      setProcessingError(message);
+
+      // Set all files to error status
+      for (const file of currentFiles) {
+        updateFileStatus(file.id, 'error');
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [
+    isProcessing,
+    setParsedDocuments,
+    setCoverageAnalysis,
+    updateFileStatus,
+  ]);
+
+  const queueAutoProcess = useCallback(() => {
+    clearAutoProcessTimer();
+    autoProcessTimeoutRef.current = setTimeout(() => {
+      void handleProcessDocuments();
+    }, 500);
+  }, [clearAutoProcessTimer, handleProcessDocuments]);
+
+  useEffect(() => {
+    return () => clearAutoProcessTimer();
+  }, [clearAutoProcessTimer]);
 
   const handleFilesAdded = (files: File[]) => {
+    // Reset previous processing outputs and rerun on latest upload set.
+    setParsedDocuments([]);
+    setCoverageAnalysis(null);
+
     for (const file of files) {
       const id = `file_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-      store.addUploadedFile({
+      addUploadedFile({
         id,
         file,
         name: file.name,
@@ -31,60 +119,14 @@ export function StepUpload() {
         progress: 0,
       });
 
-      // Simulate upload progress (instant since mock)
-      store.updateFileStatus(id, 'uploading', 50);
-
-      // Simulate completion
+      // Lightweight upload status transition before processing.
+      updateFileStatus(id, 'uploading', 50);
       setTimeout(() => {
-        store.updateFileStatus(id, 'parsed', 100);
+        updateFileStatus(id, 'uploading', 100);
       }, 300);
     }
-  };
 
-  const handleProcessDocuments = async () => {
-    setIsProcessing(true);
-    setProcessingError(null);
-
-    // Set all files to processing status
-    for (const file of store.uploadedFiles) {
-      store.updateFileStatus(file.id, 'processing');
-    }
-
-    try {
-      const config = {
-        n8nBaseUrl: store.n8nBaseUrl,
-        openaiApiKey: store.openaiApiKey,
-        selectedModel: store.selectedModel,
-        useMockData: store.useMockData,
-      };
-
-      const rawFiles = store.uploadedFiles.map((f) => f.file);
-      const result = await processDocuments(config, rawFiles);
-
-      // Store parsed documents
-      store.setParsedDocuments(result.documents);
-
-      // Store coverage analysis
-      store.setCoverageAnalysis({
-        overallCoverage: result.overallCoverage,
-        gaps: result.gaps,
-      });
-
-      // Set all files back to parsed
-      for (const file of store.uploadedFiles) {
-        store.updateFileStatus(file.id, 'parsed', 100);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Document processing failed';
-      setProcessingError(message);
-
-      // Set all files to error status
-      for (const file of store.uploadedFiles) {
-        store.updateFileStatus(file.id, 'error');
-      }
-    } finally {
-      setIsProcessing(false);
-    }
+    queueAutoProcess();
   };
 
   return (
@@ -95,8 +137,8 @@ export function StepUpload() {
       {/* File List */}
       {hasFiles && (
         <FileList
-          files={store.uploadedFiles}
-          onRemove={(id) => store.removeUploadedFile(id)}
+          files={uploadedFiles}
+          onRemove={(id) => removeUploadedFile(id)}
         />
       )}
 
@@ -104,7 +146,7 @@ export function StepUpload() {
       {hasFiles && !hasCoverage && (
         <Button
           onClick={handleProcessDocuments}
-          disabled={isProcessing || store.uploadedFiles.length === 0}
+          disabled={isProcessing || uploadedFiles.length === 0}
           className="gap-2 bg-[var(--color-crowe-amber-core)] text-[var(--color-crowe-indigo-dark)] hover:bg-[var(--color-crowe-amber-bright)] disabled:opacity-40"
         >
           {isProcessing ? (
@@ -158,12 +200,12 @@ export function StepUpload() {
       )}
 
       {/* Coverage Analysis Grid */}
-      {hasCoverage && store.coverageAnalysis && (
-        <CoverageAnalysisGrid coverage={store.coverageAnalysis} />
+      {hasCoverage && coverageAnalysis && (
+        <CoverageAnalysisGrid coverage={coverageAnalysis} />
       )}
 
       {/* Gap warnings section */}
-      {hasCoverage && store.coverageAnalysis && store.coverageAnalysis.gaps.length > 0 && (
+      {hasCoverage && coverageAnalysis && coverageAnalysis.gaps.length > 0 && (
         <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
           <p className="text-xs text-muted-foreground">
             Gaps identified above will be flagged in the generated report. You can address
@@ -175,3 +217,4 @@ export function StepUpload() {
     </div>
   );
 }
+

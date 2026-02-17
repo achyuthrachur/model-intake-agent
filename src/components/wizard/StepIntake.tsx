@@ -1,8 +1,8 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useCallback, useRef } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
-import { sendChatMessage } from '@/lib/n8n-client';
+import { sendChatMessage } from '@/lib/api-client';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { IntakeFormPanel } from '@/components/intake-form/IntakeFormPanel';
@@ -48,8 +48,6 @@ export function StepIntake() {
       try {
         // 3. Call sendChatMessage with config from store
         const config = {
-          n8nBaseUrl: store.n8nBaseUrl,
-          openaiApiKey: store.openaiApiKey,
           selectedModel: store.selectedModel,
           useMockData: store.useMockData,
         };
@@ -96,8 +94,6 @@ export function StepIntake() {
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
-      store.n8nBaseUrl,
-      store.openaiApiKey,
       store.selectedModel,
       store.useMockData,
       store.messages,
@@ -139,3 +135,4 @@ export function StepIntake() {
     </div>
   );
 }
+

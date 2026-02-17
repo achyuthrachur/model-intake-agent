@@ -25,7 +25,6 @@ function randomDelay(min: number, max: number): Promise<void> {
 export async function mockSendChatMessage(
   message: string,
   conversationHistory: ChatMessage[],
-  _formState: IntakeFormState,
 ): Promise<{ aiReply: string; fieldUpdates: FieldUpdate[] }> {
   await randomDelay(800, 1500);
 
@@ -257,7 +256,9 @@ export async function mockProcessDocuments(
 
   for (const section of allSections) {
     if (allCoveredSections.has(section)) {
-      const sources = documents.filter((d) => d.sectionsCovered.includes(section)).map((d) => d.id);
+      const sources = documents
+        .filter((d) => d.sectionsCovered.includes(section))
+        .map((d) => d.filename);
       overallCoverage[section] = { status: 'covered', sources, confidence: 'high' };
     } else {
       overallCoverage[section] = { status: 'gap', sources: [] };

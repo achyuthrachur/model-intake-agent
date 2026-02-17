@@ -1,6 +1,5 @@
-'use client';
+﻿'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useIntakeStore } from '@/stores/intake-store';
@@ -14,24 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Brain,
-  FileText,
-  Shield,
-  Sun,
-  Moon,
-  ArrowRight,
-  Eye,
-  EyeOff,
-  AlertTriangle,
-} from 'lucide-react';
+import { Brain, FileText, Shield, Sun, Moon, ArrowRight } from 'lucide-react';
 import type { AIModel } from '@/types';
 
 export default function LandingPage() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const store = useIntakeStore();
-  const [showApiKey, setShowApiKey] = useState(false);
 
   const handleStart = () => {
     if (!store.bankName.trim()) return;
@@ -62,9 +50,7 @@ export default function LandingPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
               <Shield className="h-5 w-5 text-primary-foreground" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              Model Intake Portal
-            </h1>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Model Intake Portal</h1>
           </div>
           <p className="max-w-md text-base text-muted-foreground">
             AI-powered model documentation for Model Risk Management. Streamline your
@@ -101,56 +87,8 @@ export default function LandingPage() {
                 value={store.bankName}
                 onChange={(e) => store.setBankName(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Used in document headers and cover pages
-              </p>
+              <p className="text-xs text-muted-foreground">Used in document headers and cover pages</p>
             </div>
-
-            {/* n8n Instance URL */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">
-                n8n Instance URL
-              </label>
-              <Input
-                placeholder="http://localhost:5678"
-                value={store.n8nBaseUrl}
-                onChange={(e) => store.setN8nBaseUrl(e.target.value)}
-                disabled={store.useMockData}
-                className={store.useMockData ? 'opacity-50' : ''}
-              />
-            </div>
-
-            {/* OpenAI API Key */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">
-                OpenAI API Key
-              </label>
-              <div className="relative">
-                <Input
-                  type={showApiKey ? 'text' : 'password'}
-                  placeholder="sk-..."
-                  value={store.openaiApiKey}
-                  onChange={(e) => store.setApiKey(e.target.value)}
-                  disabled={store.useMockData}
-                  className={`pr-10 ${store.useMockData ? 'opacity-50' : ''}`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  tabIndex={-1}
-                >
-                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            {!store.useMockData && store.openaiApiKey && !store.openaiApiKey.startsWith('sk-') && (
-              <p className="flex items-center gap-1 text-xs text-destructive">
-                <AlertTriangle className="h-3 w-3" />
-                API key should start with &quot;sk-&quot;
-              </p>
-            )}
 
             {/* Model + Mock mode row */}
             <div className="flex items-end gap-4">
@@ -175,9 +113,7 @@ export default function LandingPage() {
                 <button
                   onClick={() => store.setUseMockData(!store.useMockData)}
                   className={`relative h-6 w-11 rounded-full transition-colors ${
-                    store.useMockData
-                      ? 'bg-[var(--color-crowe-teal)]'
-                      : 'bg-border'
+                    store.useMockData ? 'bg-[var(--color-crowe-teal)]' : 'bg-border'
                   }`}
                 >
                   <div
@@ -192,7 +128,7 @@ export default function LandingPage() {
 
             {store.useMockData && (
               <p className="rounded-md bg-[var(--color-crowe-teal)]/10 px-3 py-2 text-xs text-[var(--color-crowe-teal-dark)]">
-                Mock mode enabled — all AI responses use realistic pre-built data. No n8n instance or API key required.
+                Mock mode enabled. All AI responses use realistic pre-built data and internal API calls are bypassed.
               </p>
             )}
           </div>

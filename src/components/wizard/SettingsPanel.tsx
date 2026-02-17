@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -11,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { X, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { AIModel } from '@/types';
 
 interface SettingsPanelProps {
@@ -19,17 +18,10 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-function isValidApiKey(key: string): boolean {
-  return key === '' || key.startsWith('sk-');
-}
-
 export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
   const store = useIntakeStore();
-  const [showApiKey, setShowApiKey] = useState(false);
 
   if (!open) return null;
-
-  const apiKeyValid = isValidApiKey(store.openaiApiKey);
 
   return (
     <>
@@ -61,47 +53,6 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
             />
           </div>
 
-          {/* n8n Instance URL */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-foreground">n8n Instance URL</label>
-            <Input
-              value={store.n8nBaseUrl}
-              onChange={(e) => store.setN8nBaseUrl(e.target.value)}
-              placeholder="http://localhost:5678"
-              disabled={store.useMockData}
-              className={store.useMockData ? 'opacity-50' : ''}
-            />
-          </div>
-
-          {/* OpenAI API Key */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-foreground">OpenAI API Key</label>
-            <div className="relative">
-              <Input
-                type={showApiKey ? 'text' : 'password'}
-                value={store.openaiApiKey}
-                onChange={(e) => store.setApiKey(e.target.value)}
-                placeholder="sk-..."
-                disabled={store.useMockData}
-                className={`pr-10 ${store.useMockData ? 'opacity-50' : ''}`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                tabIndex={-1}
-              >
-                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            {!apiKeyValid && (
-              <p className="flex items-center gap-1 text-xs text-destructive">
-                <AlertTriangle className="h-3 w-3" />
-                API key should start with &quot;sk-&quot;
-              </p>
-            )}
-          </div>
-
           {/* Model */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-foreground">Model</label>
@@ -126,9 +77,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
             <button
               onClick={() => store.setUseMockData(!store.useMockData)}
               className={`relative h-6 w-11 rounded-full transition-colors ${
-                store.useMockData
-                  ? 'bg-[var(--color-crowe-teal)]'
-                  : 'bg-border'
+                store.useMockData ? 'bg-[var(--color-crowe-teal)]' : 'bg-border'
               }`}
             >
               <div
@@ -141,7 +90,7 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
 
           {store.useMockData && (
             <p className="rounded-md bg-[var(--color-crowe-teal)]/10 px-3 py-2 text-xs text-[var(--color-crowe-teal-dark)] dark:text-[var(--color-crowe-teal-bright)]">
-              Mock mode — AI responses use pre-built data. No n8n or API key needed.
+              Mock mode enabled. Internal API routes are bypassed and deterministic test data is used.
             </p>
           )}
         </div>
