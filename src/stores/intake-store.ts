@@ -16,6 +16,7 @@ import type {
   CoverageAnalysis,
   GeneratedReport,
   AIModel,
+  SessionMode,
   AssumptionRow,
   LimitationRow,
   ReferenceRow,
@@ -202,14 +203,16 @@ function formatManualEditValue(value: unknown): string {
 // Store Interface
 // ============================================================
 
+const DEFAULT_SESSION_MODE: SessionMode = 'demo';
+
 interface IntakeStore {
   // Config
   selectedModel: AIModel;
   setSelectedModel: (model: AIModel) => void;
   bankName: string;
   setBankName: (name: string) => void;
-  useMockData: boolean;
-  setUseMockData: (v: boolean) => void;
+  sessionMode: SessionMode;
+  setSessionMode: (mode: SessionMode) => void;
 
   // Wizard
   currentStep: 1 | 2 | 3;
@@ -271,8 +274,8 @@ export const useIntakeStore = create<IntakeStore>()((set, get) => ({
       bankName: '',
       setBankName: (name: string) => set({ bankName: name }),
 
-      useMockData: true,
-      setUseMockData: (v: boolean) => set({ useMockData: v }),
+      sessionMode: DEFAULT_SESSION_MODE,
+      setSessionMode: (mode: SessionMode) => set({ sessionMode: mode }),
 
       // --------------------------------------------------------
       // Wizard
@@ -487,6 +490,7 @@ export const useIntakeStore = create<IntakeStore>()((set, get) => ({
       // --------------------------------------------------------
       resetSession: () =>
         set({
+          sessionMode: DEFAULT_SESSION_MODE,
           currentStep: 1,
           messages: [],
           formData: createInitialFormState(),

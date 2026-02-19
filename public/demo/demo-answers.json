@@ -1,0 +1,14 @@
+[
+  "The model is Horizon Credit Scorecard, a retail unsecured lending credit risk model used for origination decisions.",
+  "It was developed by the enterprise analytics team in partnership with risk management and is owned by the Chief Credit Officer organization.",
+  "The model uses logistic regression with a scorecard overlay, calibrated on five years of booked and performance data.",
+  "Primary data comes from internal loan servicing records, bureau tradeline attributes, and verified application data.",
+  "Development data covers 2019 through 2024, with monthly refresh checks and documented data quality controls.",
+  "Validation was performed by the independent model risk team in November 2025 with a satisfactory rating.",
+  "Back-testing and benchmark comparisons are performed quarterly against challenger models and realized default trends.",
+  "Monitoring reports include population stability, characteristic stability, and realized versus expected loss metrics.",
+  "Implementation is controlled through versioned releases, change management tickets, and role-based access controls.",
+  "Known limitations include sensitivity to macroeconomic shocks and reduced performance on thin-file applicants.",
+  "Compensating controls include policy overlays, override governance, and enhanced post-decision monitoring.",
+  "All methodology, assumptions, and governance evidence are documented in the vendor methodology and validation artifacts."
+]

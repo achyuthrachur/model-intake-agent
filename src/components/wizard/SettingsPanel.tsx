@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { X, SlidersHorizontal } from 'lucide-react';
 import { prefersReducedMotion } from '@/lib/anime-motion';
-import type { AIModel } from '@/types';
+import type { AIModel, SessionMode } from '@/types';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -88,9 +88,9 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
             <Select
               value={store.selectedModel}
               onValueChange={(v) => store.setSelectedModel(v as AIModel)}
-              disabled={store.useMockData}
+              disabled={store.sessionMode === 'mock'}
             >
-              <SelectTrigger className={store.useMockData ? 'opacity-60' : ''}>
+              <SelectTrigger className={store.sessionMode === 'mock' ? 'opacity-60' : ''}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -100,37 +100,33 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
             </Select>
           </div>
 
-          <div className="surface-muted rounded-xl px-3 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Mock Mode</p>
-                <p className="text-xs text-muted-foreground">
-                  Use deterministic demo data instead of live API calls.
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Toggle mock mode"
-                onClick={() => store.setUseMockData(!store.useMockData)}
-                className={`relative h-6 w-11 rounded-full border transition-colors ${
-                  store.useMockData
-                    ? 'border-[var(--color-crowe-teal)] bg-[var(--color-crowe-teal)]'
-                    : 'border-border bg-muted'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow transition-transform duration-200 ${
-                    store.useMockData ? 'translate-x-[22px]' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-foreground">Session Mode</label>
+            <Select
+              value={store.sessionMode}
+              onValueChange={(value) => store.setSessionMode(value as SessionMode)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="live">Live (AI)</SelectItem>
+                <SelectItem value="demo">Demo (AI + Prefill)</SelectItem>
+                <SelectItem value="mock">Offline Mock (No AI)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {store.useMockData && (
+          {store.sessionMode === 'mock' ? (
             <p className="rounded-lg border border-[var(--color-crowe-teal)]/25 bg-[var(--color-crowe-teal)]/12 px-3 py-2 text-xs text-[var(--color-crowe-teal-dark)] dark:text-[var(--color-crowe-teal-bright)]">
-              Mock mode enabled. Internal API routes are bypassed and deterministic
-              test data is used.
+              Offline Mock uses deterministic sample data and bypasses internal AI routes.
+            </p>
+          ) : (
+            <p className="rounded-lg border border-[var(--color-crowe-indigo-bright)]/20 bg-[var(--color-crowe-indigo-bright)]/10 px-3 py-2 text-xs text-[var(--color-crowe-indigo-core)] dark:text-[var(--color-crowe-cyan-bright)]">
+              {store.sessionMode === 'demo'
+                ? 'Demo mode runs real AI routes with scripted chat prefills and demo document loading.'
+                : 'Live mode runs real AI routes with manual chat and manual document uploads.'}{' '}
+              OPENAI_API_KEY must be configured server-side.
             </p>
           )}
         </div>

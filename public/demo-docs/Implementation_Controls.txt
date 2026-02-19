@@ -1,0 +1,24 @@
+Implementation and Controls Memo - Horizon Credit Scorecard v3.2
+
+1. Deployment Architecture
+Model is deployed as a versioned service within the credit decisioning platform.
+Inputs are validated against schema rules before scoring.
+Score outputs and reason codes are persisted for downstream reporting.
+
+2. Access and Security
+Production changes require ticket approval and separation of duties.
+Write access is limited to authorized engineering and MRM administrators.
+Service secrets are managed through centralized key management.
+
+3. Change Management
+All material changes require model owner approval and MRM notification.
+Release artifacts include test evidence, rollback plan, and control sign-off.
+Emergency changes require post-implementation review within five business days.
+
+4. Monitoring and Reporting
+Monthly monitoring includes drift metrics, override rates, and realized performance trends.
+Quarterly governance package includes incidents, enhancements, and remediation status.
+
+5. Contingency
+Fallback process routes affected applications to manual underwriting if service degradation occurs.
+Business continuity runbooks are reviewed semi-annually.

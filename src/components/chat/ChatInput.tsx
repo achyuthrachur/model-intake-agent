@@ -1,15 +1,16 @@
 'use client';
 
-import { useRef, useState, useCallback, type KeyboardEvent } from 'react';
+import { useRef, useState, useCallback, useEffect, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Send } from 'lucide-react';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled: boolean;
+  suggestedMessage?: string;
 }
 
-export function ChatInput({ onSend, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, suggestedMessage }: ChatInputProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -23,7 +24,8 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   }, []);
 
   const handleSend = useCallback(() => {
-    const trimmed = value.trim();
+    const effectiveValue = value.length > 0 ? value : suggestedMessage ?? '';
+    const trimmed = effectiveValue.trim();
     if (!trimmed || disabled) return;
     onSend(trimmed);
     setValue('');
@@ -33,7 +35,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         textareaRef.current.style.height = 'auto';
       }
     });
-  }, [value, disabled, onSend]);
+  }, [value, suggestedMessage, disabled, onSend]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -45,13 +47,20 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     [handleSend],
   );
 
-  const isSendDisabled = disabled || value.trim().length === 0;
+  const resolvedValue = value.length > 0 ? value : suggestedMessage ?? '';
+  const isSendDisabled = disabled || resolvedValue.trim().length === 0;
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      adjustHeight();
+    });
+  }, [resolvedValue, adjustHeight]);
 
   return (
     <div className="surface-muted flex items-end gap-2 border-t border-border/70 px-4 py-3">
       <textarea
         ref={textareaRef}
-        value={value}
+        value={resolvedValue}
         onChange={(e) => {
           setValue(e.target.value);
           adjustHeight();

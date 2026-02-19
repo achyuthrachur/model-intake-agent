@@ -64,7 +64,7 @@ export function StepGenerate() {
     try {
       const config = {
         selectedModel: store.selectedModel,
-        useMockData: store.useMockData,
+        useMockData: store.sessionMode === 'mock',
       };
 
       const report = await generateReport(
@@ -97,9 +97,11 @@ export function StepGenerate() {
         <Select
           value={store.selectedModel}
           onValueChange={(v) => store.setSelectedModel(v as AIModel)}
-          disabled={isGenerating}
+          disabled={isGenerating || store.sessionMode === 'mock'}
         >
-          <SelectTrigger className="w-48">
+          <SelectTrigger
+            className={`w-48 ${store.sessionMode === 'mock' ? 'opacity-60' : ''}`}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

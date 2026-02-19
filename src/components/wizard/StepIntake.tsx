@@ -1,8 +1,9 @@
 ﻿'use client';
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { sendChatMessage } from '@/lib/api-client';
+import { loadDemoAnswers } from '@/lib/demo-answers';
 import { useAnimeStagger } from '@/lib/anime-motion';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatInput } from '@/components/chat/ChatInput';
@@ -23,6 +24,7 @@ export function StepIntake() {
   const store = useIntakeStore();
   const lastUserMessageRef = useRef<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [demoAnswers, setDemoAnswers] = useState<string[]>([]);
 
   useAnimeStagger(rootRef, [store.messages.length, store.isStreaming], '[data-reveal]', {
     delay: 60,
@@ -37,6 +39,32 @@ export function StepIntake() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (store.sessionMode !== 'demo') {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void loadDemoAnswers()
+      .then((answers) => {
+        if (!cancelled) {
+          setDemoAnswers(answers);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDemoAnswers([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [store.sessionMode]);
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -57,7 +85,7 @@ export function StepIntake() {
         // 3. Call sendChatMessage with config from store
         const config = {
           selectedModel: store.selectedModel,
-          useMockData: store.useMockData,
+          useMockData: store.sessionMode === 'mock',
         };
 
         const response = await sendChatMessage(
@@ -103,7 +131,7 @@ export function StepIntake() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       store.selectedModel,
-      store.useMockData,
+      store.sessionMode,
       store.messages,
       store.formData,
     ],
@@ -111,6 +139,9 @@ export function StepIntake() {
 
   const lastMessageIsError =
     store.messages.length > 0 && store.messages[store.messages.length - 1].role === 'system';
+  const demoTurnIndex = store.messages.filter((message) => message.role === 'user').length;
+  const suggestedMessage =
+    store.sessionMode === 'demo' ? demoAnswers[demoTurnIndex] : undefined;
 
   const handleRetry = () => {
     if (lastUserMessageRef.current) {
@@ -136,7 +167,11 @@ export function StepIntake() {
             </Button>
           </div>
         )}
-        <ChatInput onSend={handleSend} disabled={store.isStreaming} />
+        <ChatInput
+          onSend={handleSend}
+          disabled={store.isStreaming}
+          suggestedMessage={suggestedMessage}
+        />
       </div>
 
       {/* Right panel: Intake Form */}

@@ -225,9 +225,10 @@ export interface GeneratedReport {
 
 // --- Config Types ---
 export type AIModel = 'gpt-4o' | 'gpt-4o-mini';
+export type SessionMode = 'live' | 'demo' | 'mock';
 
 export interface PortalConfig {
   selectedModel: AIModel;
   bankName: string;
-  useMockData: boolean;
+  sessionMode: SessionMode;
 }

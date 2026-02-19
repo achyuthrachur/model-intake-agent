@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Brain, FileText, Shield, ArrowRight, Sparkles } from 'lucide-react';
-import type { AIModel } from '@/types';
+import type { AIModel, SessionMode } from '@/types';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -203,15 +203,15 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-foreground">Model</label>
                 <Select
                   value={store.selectedModel}
                   onValueChange={(v) => store.setSelectedModel(v as AIModel)}
-                  disabled={store.useMockData}
+                  disabled={store.sessionMode === 'mock'}
                 >
-                  <SelectTrigger className={store.useMockData ? 'opacity-60' : ''}>
+                  <SelectTrigger className={store.sessionMode === 'mock' ? 'opacity-60' : ''}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -221,37 +221,35 @@ export default function LandingPage() {
                 </Select>
               </div>
 
-              <div className="surface-muted rounded-xl px-3 py-2.5">
-                <button
-                  type="button"
-                  aria-label="Toggle mock mode"
-                  onClick={() => store.setUseMockData(!store.useMockData)}
-                  className="group flex items-center gap-2"
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-foreground">Session Mode</label>
+                <Select
+                  value={store.sessionMode}
+                  onValueChange={(value) => store.setSessionMode(value as SessionMode)}
                 >
-                  <span className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    Mock
-                  </span>
-                  <span
-                    className={`relative h-6 w-11 rounded-full border transition-colors duration-200 ${
-                      store.useMockData
-                        ? 'border-[var(--color-crowe-teal)] bg-[var(--color-crowe-teal)]'
-                        : 'border-border bg-muted'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow transition-transform duration-200 ${
-                        store.useMockData ? 'translate-x-[22px]' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </span>
-                </button>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="live">Live (AI)</SelectItem>
+                    <SelectItem value="demo">Demo (AI + Prefill)</SelectItem>
+                    <SelectItem value="mock">Offline Mock (No AI)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
-            {store.useMockData && (
+            {store.sessionMode === 'mock' ? (
               <p className="rounded-lg border border-[var(--color-crowe-teal)]/25 bg-[var(--color-crowe-teal)]/12 px-3 py-2 text-xs text-[var(--color-crowe-teal-dark)] dark:text-[var(--color-crowe-teal-bright)]">
-                Mock mode is enabled. API calls are bypassed and deterministic sample
-                data is returned.
+                Offline Mock is enabled. Internal API routes are bypassed and deterministic
+                sample data is returned.
+              </p>
+            ) : (
+              <p className="rounded-lg border border-[var(--color-crowe-indigo-bright)]/20 bg-[var(--color-crowe-indigo-bright)]/10 px-3 py-2 text-xs text-[var(--color-crowe-indigo-core)] dark:text-[var(--color-crowe-cyan-bright)]">
+                {store.sessionMode === 'demo'
+                  ? 'Demo mode uses real AI routes with scripted prefills and one-click demo document loading.'
+                  : 'Live mode uses real AI routes with manual chat responses and manual document uploads.'}{' '}
+                OPENAI_API_KEY must be configured on the server.
               </p>
             )}
           </div>

@@ -5,6 +5,11 @@ describe('intake store', () => {
     useIntakeStore.getState().resetSession();
   });
 
+  it('defaults to demo mode', () => {
+    const state = useIntakeStore.getState();
+    expect(state.sessionMode).toBe('demo');
+  });
+
   it('applies snake_case field updates and tracks recent updates', () => {
     const store = useIntakeStore.getState();
     store.applyFieldUpdates([
@@ -38,9 +43,11 @@ describe('intake store', () => {
     store.updateField('modelSummary', 'modelType', 'Credit Risk');
     store.addManualEditSystemMessage('modelSummary', 'modelType', 'Credit Risk');
     store.setStep(3);
+    store.setSessionMode('mock');
     store.resetSession();
 
     const state = useIntakeStore.getState();
+    expect(state.sessionMode).toBe('demo');
     expect(state.currentStep).toBe(1);
     expect(state.messages).toHaveLength(0);
     expect(state.formData.modelSummary.modelType).toBe('');

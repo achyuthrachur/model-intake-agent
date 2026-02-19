@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { processDocuments } from '@/lib/api-client';
+import { loadDemoFiles } from '@/lib/demo-docs';
 import { useAnimeStagger } from '@/lib/anime-motion';
 import { DropZone } from '@/components/upload/DropZone';
 import { FileList } from '@/components/upload/FileList';
 import { CoverageAnalysisGrid } from '@/components/upload/CoverageAnalysis';
 import { Button } from '@/components/ui/button';
-import { Loader2, FileSearch, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Loader2, FileSearch, AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
 
 export function StepUpload() {
+  const sessionMode = useIntakeStore((s) => s.sessionMode);
   const uploadedFiles = useIntakeStore((s) => s.uploadedFiles);
   const coverageAnalysis = useIntakeStore((s) => s.coverageAnalysis);
   const addUploadedFile = useIntakeStore((s) => s.addUploadedFile);
@@ -19,6 +21,7 @@ export function StepUpload() {
   const setParsedDocuments = useIntakeStore((s) => s.setParsedDocuments);
   const setCoverageAnalysis = useIntakeStore((s) => s.setCoverageAnalysis);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoadingDemoFiles, setIsLoadingDemoFiles] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const autoProcessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -50,7 +53,7 @@ export function StepUpload() {
     try {
       const config = {
         selectedModel: latestState.selectedModel,
-        useMockData: latestState.useMockData,
+        useMockData: latestState.sessionMode === 'mock',
       };
 
       const rawFiles = currentFiles.map((f) => f.file);
@@ -109,7 +112,9 @@ export function StepUpload() {
     y: 12,
   });
 
-  const handleFilesAdded = (files: File[]) => {
+  const handleFilesAdded = useCallback((files: File[]) => {
+    setProcessingError(null);
+
     // Reset previous processing outputs and rerun on latest upload set.
     setParsedDocuments([]);
     setCoverageAnalysis(null);
@@ -135,7 +140,34 @@ export function StepUpload() {
     }
 
     queueAutoProcess();
-  };
+  }, [
+    addUploadedFile,
+    queueAutoProcess,
+    setParsedDocuments,
+    setCoverageAnalysis,
+    updateFileStatus,
+  ]);
+
+  const handleLoadDemoDocuments = useCallback(async () => {
+    if (isLoadingDemoFiles || isProcessing) return;
+
+    setIsLoadingDemoFiles(true);
+    setProcessingError(null);
+
+    try {
+      const demoFiles = await loadDemoFiles();
+      if (demoFiles.length === 0) {
+        throw new Error('No demo documents were available to load.');
+      }
+
+      handleFilesAdded(demoFiles);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load demo documents';
+      setProcessingError(message);
+    } finally {
+      setIsLoadingDemoFiles(false);
+    }
+  }, [handleFilesAdded, isLoadingDemoFiles, isProcessing]);
 
   return (
     <div
@@ -144,6 +176,32 @@ export function StepUpload() {
     >
       {/* Drop Zone */}
       <div data-reveal className="surface-card rounded-2xl p-4 md:p-5">
+        {sessionMode === 'demo' && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-[var(--color-crowe-indigo-bright)]/20 bg-[var(--color-crowe-indigo-bright)]/8 px-3 py-2">
+            <p className="text-xs text-[var(--color-crowe-indigo-core)] dark:text-[var(--color-crowe-cyan-bright)]">
+              Demo mode: load the synthetic document set instantly.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 gap-1.5"
+              onClick={handleLoadDemoDocuments}
+              disabled={isLoadingDemoFiles || isProcessing}
+            >
+              {isLoadingDemoFiles ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Load Demo Documents
+                </>
+              )}
+            </Button>
+          </div>
+        )}
         <DropZone onFilesAdded={handleFilesAdded} />
       </div>
 
@@ -159,7 +217,7 @@ export function StepUpload() {
         <Button
           data-reveal
           onClick={handleProcessDocuments}
-          disabled={isProcessing || uploadedFiles.length === 0}
+          disabled={isProcessing || isLoadingDemoFiles || uploadedFiles.length === 0}
           className="gap-2 bg-[var(--color-crowe-amber-core)] text-[var(--color-crowe-indigo-dark)] hover:bg-[var(--color-crowe-amber-bright)] disabled:opacity-40"
         >
           {isProcessing ? (
