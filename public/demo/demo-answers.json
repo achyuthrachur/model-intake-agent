@@ -1,4 +1,4 @@
-﻿[
+[
   "The model is Northstar CECL Suite v4.2, a vendor expected credit loss platform for ASC 326 (CECL) allowance estimation. This is stated in the Methodology & Model Development Report (NA-CECL-MDR-4.2, release date February 17, 2026).",
   "The vendor/developer is Northstar Analytics. The demo package identifies client stakeholders as Finance and Credit Risk, and operational users include Model Owners and Model Risk Management in the Runbook and Monitoring Guide.",
   "Methodology-wise, it uses a component architecture across PD, LGD/recovery, and EAD/utilization, plus prepayment modeling and a lifetime projection and discounting engine, as documented in the Methodology Report.",
