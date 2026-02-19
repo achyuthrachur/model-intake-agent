@@ -1,16 +1,97 @@
 [
-  "The model is Northstar CECL Suite v4.2, a vendor expected credit loss platform for ASC 326 (CECL) allowance estimation. This is stated in the Methodology & Model Development Report (NA-CECL-MDR-4.2, release date February 17, 2026).",
-  "The vendor/developer is Northstar Analytics. The demo package identifies client stakeholders as Finance and Credit Risk, and operational users include Model Owners and Model Risk Management in the Runbook and Monitoring Guide.",
-  "Methodology-wise, it uses a component architecture across PD, LGD/recovery, and EAD/utilization, plus prepayment modeling and a lifetime projection and discounting engine, as documented in the Methodology Report.",
-  "Primary business use is month-end CECL reporting and governance support, not real-time underwriting. The Runbook targets Finance Close, IT Integration, Model Owners, and Model Risk Management.",
-  "Governance alignment references SR 11-7 in the Monitoring & Governance Guide, including thresholds, escalation, issue management, evidence retention, and release governance controls.",
-  "Core outputs include lifetime ECL results, driver attribution, QC exceptions, run metadata, and audit artifacts as listed in the Implementation & Production Operations Runbook.",
-  "Data requirements come from the Data Requirements, Mapping & ETL Specification: account-level loan data, servicing/delinquency, charge-off and recovery history, collateral attributes, and macro scenario inputs.",
-  "The data interface in the ETL specification supports batch SFTP (preferred) and optional secure REST API, with controlled files, schema checks, and reconciliations before model execution.",
-  "The architecture includes intake and QC gating, model compute, post-run QC, output publishing, and immutable audit evidence storage, based on the production runbook workflow.",
-  "Scenario handling is client-governed with macro scenario sets and forecast packages; scenario impacts are reflected in output attribution and documented in the run evidence.",
-  "Assumptions and limitations are tracked through governance artifacts, including overlays and exception documentation, and the Methodology Report notes sensitivity to segmentation, calibration, and scenario design choices.",
-  "Monitoring covers data drift and model performance (PD/LGD/EAD/lifetime ECL), with defined thresholds and escalation tiers in the Monitoring & Governance Guide.",
-  "Change management is controlled through release governance, segregation of duties, and approval checkpoints in the Runbook and Monitoring Guide.",
-  "Operational resilience and control evidence are addressed through incident handling, backup/BCP/disaster recovery procedures, and audit-retention requirements in the Runbook."
+  {
+    "id": "model_identity",
+    "intents": ["model_type"],
+    "text": "Model name: Northstar CECL Suite v4.2. Model type: CECL/IFRS9 (credit risk allowance model under ASC 326)."
+  },
+  {
+    "id": "estimation_technique",
+    "intents": ["estimation_technique"],
+    "text": "Primary estimation technique: Cash Flow Analysis using a hybrid PD/LGD/EAD framework with lifetime projection and discounting."
+  },
+  {
+    "id": "developer_owner",
+    "intents": ["model_developer", "model_owner"],
+    "text": "Model developer: Northstar Analytics. Model owner: Finance Controllership - Allowance Methodology Lead, with Credit Risk oversight."
+  },
+  {
+    "id": "risk_rating",
+    "intents": ["risk_rating"],
+    "text": "Risk rating: Tier 1 (Critical), because the model directly supports CECL allowance estimation and reporting."
+  },
+  {
+    "id": "validation_details",
+    "intents": ["validation_details"],
+    "text": "Model validator: Client Model Risk Management (MRM) team. Validation date and validation rating are maintained in client governance records and are not explicitly listed in the vendor documents."
+  },
+  {
+    "id": "model_usage",
+    "intents": ["model_usage", "business_purpose"],
+    "text": "Business purpose and usage: produce month-end and quarter-end CECL allowance estimates for finance close, governance, and board/regulatory reporting support."
+  },
+  {
+    "id": "regulatory_standards",
+    "intents": ["regulatory_standards"],
+    "text": "Regulatory and policy coverage: ASC 326 (CECL), SR 11-7 model risk guidance, OCC 2011-12, and internal model risk governance policy."
+  },
+  {
+    "id": "business_units",
+    "intents": ["business_units"],
+    "text": "Business units using this model: Risk Management, Operations, Retail Banking, and Commercial Banking. Finance Controllership is the primary reporting consumer."
+  },
+  {
+    "id": "upstream_downstream",
+    "intents": ["upstream_downstream"],
+    "text": "Upstream inputs come from loan accounting, servicing/collections, recoveries, collateral, and macro scenario feeds. Downstream consumers include allowance reporting, GL control reconciliation, and model risk governance packs."
+  },
+  {
+    "id": "key_model_drivers",
+    "intents": ["key_model_drivers"],
+    "text": "Key model drivers include delinquency status, charge-off and recovery behavior, collateral position, utilization/payment behavior, and macroeconomic scenario assumptions."
+  },
+  {
+    "id": "data_sources",
+    "intents": ["data_sources"],
+    "text": "Data sources are a mix of internal and external feeds: internal loan, servicing, collections, recoveries, collateral, and GL control data plus curated macroeconomic scenario datasets."
+  },
+  {
+    "id": "output_description",
+    "intents": ["output_description"],
+    "text": "Model outputs include lifetime ECL results, PD/LGD/EAD component outputs, driver attribution, QC exceptions, run metadata, and auditable evidence artifacts."
+  },
+  {
+    "id": "scenario_governance",
+    "intents": ["scenario_governance"],
+    "text": "Scenario governance: runs are tied to named forecast packages with documented scenario sets, weighting choices, and close-cycle evidence of approvals and overlays."
+  },
+  {
+    "id": "assumptions_limitations",
+    "intents": ["assumptions_limitations"],
+    "text": "Key assumptions and limitations: sensitivity to segmentation design, calibration choices, and scenario selection; limitations and overlays are documented with mitigating controls."
+  },
+  {
+    "id": "monitoring",
+    "intents": ["monitoring"],
+    "text": "Monitoring approach: monthly data drift and performance monitoring with defined thresholds, escalation tiers, exception tracking, and evidence retention."
+  },
+  {
+    "id": "change_management",
+    "intents": ["change_management"],
+    "text": "Change management: controlled release governance with segregation of duties, approval gates, version tracking, and documented material-change review."
+  },
+  {
+    "id": "contingency",
+    "intents": ["contingency"],
+    "text": "Contingency and fallback process: incident response plus backup, business continuity, and disaster recovery procedures with defined recovery steps and retained run evidence."
+  },
+  {
+    "id": "fallback_core",
+    "intents": ["fallback"],
+    "text": "Core intake values: model type CECL/IFRS9, estimation technique Cash Flow Analysis (hybrid PD/LGD/EAD), model developer Northstar Analytics, model owner Finance Controllership, and risk rating Tier 1 (Critical)."
+  },
+  {
+    "id": "fallback_ops",
+    "intents": ["fallback"],
+    "text": "Operational controls: monthly monitoring, controlled change management, and documented contingency/DR procedures are in place for the CECL suite."
+  }
 ]

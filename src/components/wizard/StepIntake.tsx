@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { sendChatMessage } from '@/lib/api-client';
-import { loadDemoAnswers } from '@/lib/demo-answers';
+import { loadDemoAnswers, selectSuggestedDemoMessage, type DemoAnswerEntry } from '@/lib/demo-answers';
 import { useAnimeStagger } from '@/lib/anime-motion';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatInput } from '@/components/chat/ChatInput';
@@ -24,7 +24,7 @@ export function StepIntake() {
   const store = useIntakeStore();
   const lastUserMessageRef = useRef<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-  const [demoAnswers, setDemoAnswers] = useState<string[]>([]);
+  const [demoAnswers, setDemoAnswers] = useState<DemoAnswerEntry[]>([]);
 
   useAnimeStagger(rootRef, [store.messages.length, store.isStreaming], '[data-reveal]', {
     delay: 60,
@@ -139,9 +139,10 @@ export function StepIntake() {
 
   const lastMessageIsError =
     store.messages.length > 0 && store.messages[store.messages.length - 1].role === 'system';
-  const demoTurnIndex = store.messages.filter((message) => message.role === 'user').length;
   const suggestedMessage =
-    store.sessionMode === 'demo' ? demoAnswers[demoTurnIndex] : undefined;
+    store.sessionMode === 'demo'
+      ? selectSuggestedDemoMessage(store.messages, demoAnswers)
+      : undefined;
 
   const handleRetry = () => {
     if (lastUserMessageRef.current) {
