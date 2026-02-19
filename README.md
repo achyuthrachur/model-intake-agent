@@ -13,6 +13,7 @@ All orchestration now runs inside the Next.js app via internal API routes:
 - `POST /api/intake-chat`
 - `POST /api/process-docs`
 - `POST /api/generate-report`
+- `GET /api/demo-docs` (demo document manifest + file streaming)
 
 ## Tech Stack
 
@@ -60,8 +61,14 @@ npm run dev
 
 ## Modes
 
-- **Mock Mode (default ON):** deterministic local responses, no external API requests.
-- **Live Mode:** mock mode OFF, requests hit internal `/api/*` routes and call OpenAI from server.
+- **Demo Mode (default):** real AI routes + prefilled intake responses + one-click load from `Demo Documents/`.
+- **Live Mode:** real AI routes without scripted prefill behavior.
+- **Offline Mock Mode:** deterministic local responses, no external API requests.
+
+## Demo Document Source
+
+- Demo preload uses files from the repo-root folder: `Demo Documents/`.
+- Step 2 "Load Demo Documents" fetches these files through `GET /api/demo-docs`.
 
 ## Commands
 

@@ -18,16 +18,14 @@ function isManifestEntry(value: unknown): value is DemoDocumentManifestEntry {
   );
 }
 
-export async function loadDemoFiles(): Promise<File[]> {
-  const manifestResponse = await fetch('/demo-docs/manifest.json', { cache: 'no-store' });
+async function fetchDemoManifest(endpoint: string): Promise<DemoDocumentManifestEntry[]> {
+  const response = await fetch(endpoint, { cache: 'no-store' });
 
-  if (!manifestResponse.ok) {
-    throw new Error(
-      `Failed to load demo document manifest: ${manifestResponse.status} ${manifestResponse.statusText}`,
-    );
+  if (!response.ok) {
+    throw new Error(`Failed to load demo document manifest: ${response.status} ${response.statusText}`);
   }
 
-  const manifestRaw: unknown = await manifestResponse.json();
+  const manifestRaw: unknown = await response.json();
   if (!Array.isArray(manifestRaw)) {
     throw new Error('Demo document manifest must be an array.');
   }
@@ -36,6 +34,12 @@ export async function loadDemoFiles(): Promise<File[]> {
   if (manifest.length === 0) {
     throw new Error('Demo document manifest is empty or invalid.');
   }
+
+  return manifest;
+}
+
+export async function loadDemoFiles(): Promise<File[]> {
+  const manifest = await fetchDemoManifest('/api/demo-docs');
 
   const files = await Promise.all(
     manifest.map(async (entry) => {

@@ -179,7 +179,7 @@ export function StepUpload() {
         {sessionMode === 'demo' && (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-[var(--color-crowe-indigo-bright)]/20 bg-[var(--color-crowe-indigo-bright)]/8 px-3 py-2">
             <p className="text-xs text-[var(--color-crowe-indigo-core)] dark:text-[var(--color-crowe-cyan-bright)]">
-              Demo mode: load the synthetic document set instantly.
+              Demo mode: load the preloaded document set instantly.
             </p>
             <Button
               size="sm"

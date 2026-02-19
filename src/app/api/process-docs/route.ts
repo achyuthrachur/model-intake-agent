@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
+import mammoth from 'mammoth';
 import { TEMPLATE_SECTIONS } from '@/data/template-structure';
 import type { AIModel, CoverageAnalysis, CoverageEntry, ParsedDocument } from '@/types';
 
@@ -61,6 +62,19 @@ async function extractTextFromFile(file: ProcessDocumentsPayload['files'][number
   if (file.mimeType === 'application/pdf' || lowerName.endsWith('.pdf')) {
     const parsed = await pdf(buffer);
     return parsed.text || '';
+  }
+
+  if (
+    file.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    lowerName.endsWith('.docx')
+  ) {
+    try {
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value || '';
+    } catch (error) {
+      console.error(`DOCX extraction failed for ${file.filename}`, error);
+      return buffer.toString('utf8');
+    }
   }
 
   if (file.mimeType.startsWith('text/') || lowerName.endsWith('.txt')) {

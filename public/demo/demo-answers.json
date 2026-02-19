@@ -1,14 +1,16 @@
-[
-  "The model is Horizon Credit Scorecard, a retail unsecured lending credit risk model used for origination decisions.",
-  "It was developed by the enterprise analytics team in partnership with risk management and is owned by the Chief Credit Officer organization.",
-  "The model uses logistic regression with a scorecard overlay, calibrated on five years of booked and performance data.",
-  "Primary data comes from internal loan servicing records, bureau tradeline attributes, and verified application data.",
-  "Development data covers 2019 through 2024, with monthly refresh checks and documented data quality controls.",
-  "Validation was performed by the independent model risk team in November 2025 with a satisfactory rating.",
-  "Back-testing and benchmark comparisons are performed quarterly against challenger models and realized default trends.",
-  "Monitoring reports include population stability, characteristic stability, and realized versus expected loss metrics.",
-  "Implementation is controlled through versioned releases, change management tickets, and role-based access controls.",
-  "Known limitations include sensitivity to macroeconomic shocks and reduced performance on thin-file applicants.",
-  "Compensating controls include policy overlays, override governance, and enhanced post-decision monitoring.",
-  "All methodology, assumptions, and governance evidence are documented in the vendor methodology and validation artifacts."
+﻿[
+  "The model is Northstar CECL Suite v4.2, a vendor expected credit loss platform for ASC 326 (CECL) allowance estimation. This is stated in the Methodology & Model Development Report (NA-CECL-MDR-4.2, release date February 17, 2026).",
+  "The vendor/developer is Northstar Analytics. The demo package identifies client stakeholders as Finance and Credit Risk, and operational users include Model Owners and Model Risk Management in the Runbook and Monitoring Guide.",
+  "Methodology-wise, it uses a component architecture across PD, LGD/recovery, and EAD/utilization, plus prepayment modeling and a lifetime projection and discounting engine, as documented in the Methodology Report.",
+  "Primary business use is month-end CECL reporting and governance support, not real-time underwriting. The Runbook targets Finance Close, IT Integration, Model Owners, and Model Risk Management.",
+  "Governance alignment references SR 11-7 in the Monitoring & Governance Guide, including thresholds, escalation, issue management, evidence retention, and release governance controls.",
+  "Core outputs include lifetime ECL results, driver attribution, QC exceptions, run metadata, and audit artifacts as listed in the Implementation & Production Operations Runbook.",
+  "Data requirements come from the Data Requirements, Mapping & ETL Specification: account-level loan data, servicing/delinquency, charge-off and recovery history, collateral attributes, and macro scenario inputs.",
+  "The data interface in the ETL specification supports batch SFTP (preferred) and optional secure REST API, with controlled files, schema checks, and reconciliations before model execution.",
+  "The architecture includes intake and QC gating, model compute, post-run QC, output publishing, and immutable audit evidence storage, based on the production runbook workflow.",
+  "Scenario handling is client-governed with macro scenario sets and forecast packages; scenario impacts are reflected in output attribution and documented in the run evidence.",
+  "Assumptions and limitations are tracked through governance artifacts, including overlays and exception documentation, and the Methodology Report notes sensitivity to segmentation, calibration, and scenario design choices.",
+  "Monitoring covers data drift and model performance (PD/LGD/EAD/lifetime ECL), with defined thresholds and escalation tiers in the Monitoring & Governance Guide.",
+  "Change management is controlled through release governance, segregation of duties, and approval checkpoints in the Runbook and Monitoring Guide.",
+  "Operational resilience and control evidence are addressed through incident handling, backup/BCP/disaster recovery procedures, and audit-retention requirements in the Runbook."
 ]
