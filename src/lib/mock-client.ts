@@ -201,6 +201,8 @@ export async function mockProcessDocuments(
   documents: ParsedDocument[];
   overallCoverage: CoverageAnalysis['overallCoverage'];
   gaps: string[];
+  fieldUpdates: FieldUpdate[];
+  prefillNotes: string[];
 }> {
   await delay(2500);
 
@@ -266,7 +268,76 @@ export async function mockProcessDocuments(
     }
   }
 
-  return { documents, overallCoverage, gaps };
+  const fieldUpdates: FieldUpdate[] = [
+    { section: 'model_summary', field: 'model_type', value: 'CECL/IFRS9', action: 'set' },
+    {
+      section: 'model_summary',
+      field: 'estimation_technique',
+      value: 'Cash Flow Analysis',
+      action: 'set',
+    },
+    {
+      section: 'model_summary',
+      field: 'model_developer',
+      value: 'Northstar Analytics',
+      action: 'set',
+    },
+    {
+      section: 'model_summary',
+      field: 'model_owner',
+      value: 'Finance Controllership - Allowance Methodology Lead',
+      action: 'set',
+    },
+    { section: 'model_summary', field: 'risk_rating', value: 'Tier 1 (Critical)', action: 'set' },
+    {
+      section: 'executive_summary',
+      field: 'business_purpose',
+      value:
+        'Produce CECL allowance estimates for month-end and quarter-end close, governance review, and reporting support.',
+      action: 'set',
+    },
+    {
+      section: 'executive_summary',
+      field: 'regulatory_standards',
+      value: 'ASC 326 (CECL), SR 11-7, OCC 2011-12, and internal model risk policy.',
+      action: 'set',
+    },
+    {
+      section: 'executive_summary',
+      field: 'business_units',
+      value: ['Risk Management', 'Operations', 'Retail Banking', 'Commercial Banking'],
+      action: 'set',
+    },
+    {
+      section: 'executive_summary',
+      field: 'data_sources_summary',
+      value:
+        'Internal loan accounting, servicing, collections, recoveries, collateral, and GL controls plus curated macroeconomic scenario inputs.',
+      action: 'set',
+    },
+    {
+      section: 'output_use',
+      field: 'monitoring_approach',
+      value:
+        'Monthly drift and performance monitoring with thresholds, escalation paths, and exception evidence retention.',
+      action: 'set',
+    },
+    {
+      section: 'implementation',
+      field: 'change_management',
+      value:
+        'Controlled release governance with segregation of duties, approvals, and documented material-change review.',
+      action: 'set',
+    },
+  ];
+
+  return {
+    documents,
+    overallCoverage,
+    gaps,
+    fieldUpdates,
+    prefillNotes: ['Mock prefill applied from uploaded document set.'],
+  };
 }
 
 // ============================================================

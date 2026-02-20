@@ -36,6 +36,8 @@ interface DocumentProcessingResponse {
   documents: ParsedDocument[];
   overallCoverage: CoverageAnalysis['overallCoverage'];
   gaps: string[];
+  fieldUpdates: FieldUpdate[];
+  prefillNotes: string[];
 }
 
 interface IntakeChatPayload {
@@ -65,6 +67,14 @@ interface GenerateReportPayload {
 interface RawChatApiResponse {
   aiReply?: unknown;
   fieldUpdates?: unknown;
+}
+
+interface RawProcessDocumentsApiResponse {
+  documents?: unknown;
+  overallCoverage?: unknown;
+  gaps?: unknown;
+  fieldUpdates?: unknown;
+  prefillNotes?: unknown;
 }
 
 function getAiConfigPayload(config: ClientConfig): {
@@ -260,12 +270,22 @@ export async function processDocuments(
     throw new Error(`Document processing failed: ${response.status} ${response.statusText}`);
   }
 
-  const data = await response.json();
+  const data: RawProcessDocumentsApiResponse = await response.json();
+
+  const prefillNotes = Array.isArray(data.prefillNotes)
+    ? data.prefillNotes.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  const overallCoverage =
+    data.overallCoverage && typeof data.overallCoverage === 'object'
+      ? (data.overallCoverage as CoverageAnalysis['overallCoverage'])
+      : ({} as CoverageAnalysis['overallCoverage']);
 
   return {
     documents: Array.isArray(data.documents) ? data.documents : [],
-    overallCoverage: data.overallCoverage ?? {},
+    overallCoverage,
     gaps: Array.isArray(data.gaps) ? data.gaps : [],
+    fieldUpdates: sanitizeFieldUpdates(data.fieldUpdates),
+    prefillNotes,
   };
 }
 

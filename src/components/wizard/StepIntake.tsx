@@ -2,30 +2,51 @@
 
 import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
-import { sendChatMessage } from '@/lib/api-client';
+import { getUnfilledFields, sendChatMessage } from '@/lib/api-client';
 import {
   buildRemainingDemoAnswerBatch,
   loadDemoAnswers,
   selectSuggestedDemoMessage,
   type DemoAnswerEntry,
 } from '@/lib/demo-answers';
+import { INTAKE_SCHEMA } from '@/lib/intake-schema';
 import { useAnimeStagger } from '@/lib/anime-motion';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { IntakeFormPanel } from '@/components/intake-form/IntakeFormPanel';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage, IntakeFormState } from '@/types';
 
 const CHAT_REQUEST_TIMEOUT_MS = 45000;
 
-const INITIAL_GREETING: ChatMessage = {
-  id: 'greeting-1',
-  role: 'assistant',
-  content:
-    "Hello! I'm your AI assistant for the model intake process. I'll help you document your model by asking targeted questions about its design, data, performance, and governance.\n\nLet's start with the basics. Can you tell me the name and type of the model you're documenting? For example, is it a credit risk model, a pricing model, an ALM model, or something else?",
-  timestamp: Date.now(),
-};
+const FIELD_PROMPT_BY_PATH = new Map<string, string>(
+  INTAKE_SCHEMA.flatMap((section) =>
+    section.fields.map((field) => [`${section.id}.${field.name}`, field.aiHint ?? field.label] as const),
+  ),
+);
+
+const TOTAL_FIELD_COUNT = INTAKE_SCHEMA.reduce((sum, section) => sum + section.fields.length, 0);
+
+function buildInitialGreeting(formData: IntakeFormState): string {
+  const unfilledFields = getUnfilledFields(formData);
+  const filledCount = Math.max(TOTAL_FIELD_COUNT - unfilledFields.length, 0);
+
+  if (unfilledFields.length === 0) {
+    return "I reviewed the uploaded documents and all tracked intake fields are already populated. If you want, I can help refine wording or add context before you generate the report.";
+  }
+
+  const firstPrompt =
+    FIELD_PROMPT_BY_PATH.get(unfilledFields[0]) ??
+    'Could you share the next missing detail so I can complete the intake form?';
+  const normalizedPrompt = firstPrompt.trim().endsWith('?') ? firstPrompt.trim() : `${firstPrompt.trim()}?`;
+
+  if (filledCount > 0) {
+    return `I reviewed the uploaded documents and pre-filled ${filledCount} of ${TOTAL_FIELD_COUNT} intake fields. I will only ask about remaining gaps.\n\nFirst question: ${normalizedPrompt}`;
+  }
+
+  return `I could not prefill many fields from documents, so I will guide the intake questions manually.\n\nFirst question: ${normalizedPrompt}`;
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -59,10 +80,16 @@ export function StepIntake() {
     y: 14,
   });
 
-  // Add initial greeting on mount if no messages exist
+  // Add a context-aware opening question when no assistant prompt exists yet.
   useEffect(() => {
-    if (store.messages.length === 0) {
-      store.addMessage(INITIAL_GREETING);
+    const hasAssistantPrompt = store.messages.some((message) => message.role === 'assistant');
+    if (!hasAssistantPrompt) {
+      store.addMessage({
+        id: `greeting-${Date.now()}`,
+        role: 'assistant',
+        content: buildInitialGreeting(store.formData),
+        timestamp: Date.now(),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -65,6 +65,7 @@ function buildIntakeSystemPrompt(formState: IntakeFormState, unfilledFields: str
     'Guidelines:',
     '- Keep responses conversational and concise.',
     '- Prioritize unfilled fields.',
+    '- Do not ask for fields that are already filled, unless the user asks to revise them.',
     '- Ask one primary question at a time.',
     '- Emit add_row actions for table data where relevant.',
     '- Do not return JSON outside FIELD_UPDATE blocks.',
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
     const unfilledFields = Array.isArray(body.unfilledFields)
       ? body.unfilledFields.filter((entry): entry is string => typeof entry === 'string')
       : [];
-    const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-4o';
+    const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-5-chat-latest';
 
     const client = getOpenAIClient();
     const systemPrompt = buildIntakeSystemPrompt(formState, unfilledFields);

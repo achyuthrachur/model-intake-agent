@@ -22,8 +22,8 @@ interface StepDef {
 }
 
 const STEPS: StepDef[] = [
-  { number: 1, label: 'Model Intake', subtitle: 'Interview + form capture' },
-  { number: 2, label: 'Upload Documents', subtitle: 'Coverage and evidence map' },
+  { number: 1, label: 'Upload Documents', subtitle: 'Auto-prefill from evidence' },
+  { number: 2, label: 'Model Intake', subtitle: 'Chat follow-up for gaps' },
   { number: 3, label: 'Generate Report', subtitle: 'Structured narrative output' },
 ];
 
@@ -31,6 +31,7 @@ export function WizardShell() {
   const currentStep = useIntakeStore((s) => s.currentStep);
   const setStep = useIntakeStore((s) => s.setStep);
   const formData = useIntakeStore((s) => s.formData);
+  const parsedDocuments = useIntakeStore((s) => s.parsedDocuments);
   const getCompletionPercentage = useIntakeStore((s) => s.getCompletionPercentage);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -72,7 +73,14 @@ export function WizardShell() {
   const handleContinue = () => {
     setValidationWarning(null);
 
-    if (currentStep === 1) {
+    if (currentStep === 1 && parsedDocuments.length === 0) {
+      setValidationWarning(
+        'No processed documents detected yet. You can continue, but intake chat will require more manual answers.',
+      );
+      setTimeout(() => setValidationWarning(null), 5000);
+    }
+
+    if (currentStep === 2) {
       const missing: string[] = [];
       for (const path of STEP1_REQUIRED_FIELDS) {
         const [section, field] = path.split('.');
@@ -195,8 +203,8 @@ export function WizardShell() {
 
       <div className="min-h-0 flex-1">
         <div ref={contentRef} key={currentStep} className="h-full">
-          {currentStep === 1 && <StepIntake />}
-          {currentStep === 2 && <StepUpload />}
+          {currentStep === 1 && <StepUpload />}
+          {currentStep === 2 && <StepIntake />}
           {currentStep === 3 && <StepGenerate />}
         </div>
       </div>

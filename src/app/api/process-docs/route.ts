@@ -3,7 +3,8 @@ import OpenAI from 'openai';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import { TEMPLATE_SECTIONS } from '@/data/template-structure';
-import type { AIModel, CoverageAnalysis, CoverageEntry, ParsedDocument } from '@/types';
+import { INTAKE_SCHEMA } from '@/lib/intake-schema';
+import type { AIModel, CoverageAnalysis, CoverageEntry, FieldUpdate, ParsedDocument } from '@/types';
 
 export const runtime = 'nodejs';
 
@@ -29,6 +30,49 @@ interface ClassifiedDocument {
   documentSummary: string;
   coverage: Record<string, ClassifiedCoverageEntry>;
 }
+
+interface FieldCatalogEntry {
+  section: string;
+  field: string;
+  type: 'text' | 'textarea' | 'select' | 'date' | 'multi-select' | 'table';
+  options: string[];
+  tableColumns: string[];
+}
+
+interface PrefillExtractionResult {
+  fieldUpdates: FieldUpdate[];
+  notes: string[];
+}
+
+const SECTION_KEY_TO_API_SECTION: Record<string, string> = {
+  modelSummary: 'model_summary',
+  executiveSummary: 'executive_summary',
+  modelDesign: 'model_design',
+  developmentData: 'development_data',
+  outputUse: 'output_use',
+  implementation: 'implementation',
+  performance: 'performance',
+  governance: 'governance',
+};
+
+function camelToSnake(value: string): string {
+  return value.replace(/[A-Z]/g, (ch) => `_${ch.toLowerCase()}`);
+}
+
+const FIELD_CATALOG: FieldCatalogEntry[] = INTAKE_SCHEMA.flatMap((section) => {
+  const sectionName = SECTION_KEY_TO_API_SECTION[section.id] ?? section.id;
+  return section.fields.map((field) => ({
+    section: sectionName,
+    field: camelToSnake(field.name),
+    type: field.type,
+    options: field.options ?? [],
+    tableColumns: field.tableColumns?.map((column) => column.key) ?? [],
+  }));
+});
+
+const FIELD_CATALOG_INDEX: Map<string, FieldCatalogEntry> = new Map(
+  FIELD_CATALOG.map((entry) => [`${entry.section}.${entry.field}`, entry] as const),
+);
 
 function getOpenAIClient(): OpenAI {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -81,7 +125,6 @@ async function extractTextFromFile(file: ProcessDocumentsPayload['files'][number
     return buffer.toString('utf8');
   }
 
-  // DOCX/DOC fallback: byte decode only; replace with rich extraction if needed.
   return buffer.toString('utf8');
 }
 
@@ -97,6 +140,167 @@ function getConfidenceRank(value: Confidence): number {
   if (value === 'high') return 3;
   if (value === 'medium') return 2;
   return 1;
+}
+
+function normalizeSelectValue(raw: unknown, options: string[]): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (options.length === 0) return trimmed;
+
+  const normalized = trimmed.toLowerCase();
+  const exact = options.find((option) => option.toLowerCase() === normalized);
+  if (exact) return exact;
+
+  const compact = normalized.replace(/[^a-z0-9]/g, '');
+  const compactMatch = options.find(
+    (option) => option.toLowerCase().replace(/[^a-z0-9]/g, '') === compact,
+  );
+  return compactMatch ?? null;
+}
+
+function normalizeDateValue(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const isoMatch = trimmed.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  if (isoMatch) return isoMatch[0];
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function sanitizeExtractionNotes(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function sanitizeExtractedFieldUpdates(raw: unknown): FieldUpdate[] {
+  if (!Array.isArray(raw)) return [];
+
+  const updates: FieldUpdate[] = [];
+  const seenScalarKeys = new Set<string>();
+  const seenTableRows = new Set<string>();
+  let tableRowCounter = 0;
+
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.section !== 'string' || typeof record.field !== 'string') continue;
+
+    const section = record.section.trim();
+    const field = record.field.trim();
+    if (!section || !field) continue;
+
+    const key = `${section}.${field}`;
+    const catalog = FIELD_CATALOG_INDEX.get(key);
+    if (!catalog) continue;
+
+    if (catalog.type === 'table') {
+      if (record.action !== 'add_row') continue;
+      if (!record.value || typeof record.value !== 'object') continue;
+
+      const value = record.value as Record<string, unknown>;
+      const row: Record<string, string> = {
+        id: `doc_row_${Date.now()}_${tableRowCounter + 1}`,
+      };
+
+      for (const column of catalog.tableColumns) {
+        const rawColumnValue = value[column];
+        row[column] = typeof rawColumnValue === 'string' ? rawColumnValue.trim() : '';
+      }
+
+      const hasContent = catalog.tableColumns.some((column) => (row[column] ?? '').length > 0);
+      if (!hasContent) continue;
+
+      const dedupeSignature = `${key}|${catalog.tableColumns
+        .map((column) => (row[column] ?? '').toLowerCase())
+        .join('|')}`;
+      if (seenTableRows.has(dedupeSignature)) continue;
+      seenTableRows.add(dedupeSignature);
+
+      updates.push({
+        section,
+        field,
+        action: 'add_row',
+        value: row,
+      });
+      tableRowCounter += 1;
+      continue;
+    }
+
+    if (seenScalarKeys.has(key)) continue;
+
+    if (catalog.type === 'multi-select') {
+      const rawValues = Array.isArray(record.value)
+        ? record.value
+        : typeof record.value === 'string'
+          ? record.value.split(/[,;|]/)
+          : [];
+
+      const normalizedValues = rawValues
+        .map((value) => normalizeSelectValue(value, catalog.options))
+        .filter((value): value is string => value !== null);
+      const deduped = [...new Set(normalizedValues)];
+      if (deduped.length === 0) continue;
+
+      updates.push({
+        section,
+        field,
+        action: 'set',
+        value: deduped,
+      });
+      seenScalarKeys.add(key);
+      continue;
+    }
+
+    if (catalog.type === 'date') {
+      const normalized = normalizeDateValue(record.value);
+      if (!normalized) continue;
+
+      updates.push({
+        section,
+        field,
+        action: 'set',
+        value: normalized,
+      });
+      seenScalarKeys.add(key);
+      continue;
+    }
+
+    if (catalog.type === 'select') {
+      const normalized = normalizeSelectValue(record.value, catalog.options);
+      if (!normalized) continue;
+
+      updates.push({
+        section,
+        field,
+        action: 'set',
+        value: normalized,
+      });
+      seenScalarKeys.add(key);
+      continue;
+    }
+
+    if (typeof record.value !== 'string') continue;
+    const textValue = record.value.trim();
+    if (!textValue) continue;
+
+    updates.push({
+      section,
+      field,
+      action: 'set',
+      value: textValue,
+    });
+    seenScalarKeys.add(key);
+  }
+
+  return updates.slice(0, 120);
 }
 
 async function classifyDocument(
@@ -176,6 +380,79 @@ async function classifyDocument(
   };
 }
 
+async function extractPrefillFieldUpdates(
+  client: OpenAI,
+  model: AIModel,
+  parsedDocuments: ParsedDocument[],
+): Promise<PrefillExtractionResult> {
+  const docsWithText = parsedDocuments
+    .map((doc) => ({
+      filename: doc.filename,
+      documentSummary: doc.documentSummary,
+      excerpt: doc.extractedText.slice(0, 7000),
+    }))
+    .filter((doc) => doc.excerpt.trim().length > 0);
+
+  if (docsWithText.length === 0) {
+    return { fieldUpdates: [], notes: [] };
+  }
+
+  const prompt = [
+    'You extract intake form values from banking model documentation.',
+    'Return strict JSON only in this shape:',
+    '{',
+    '  "fieldUpdates": [',
+    '    {',
+    '      "section": "model_summary",',
+    '      "field": "model_type",',
+    '      "action": "set",',
+    '      "value": "CECL/IFRS9"',
+    '    }',
+    '  ],',
+    '  "notes": ["string"]',
+    '}',
+    '',
+    'Rules:',
+    '- Use only explicit evidence from documents.',
+    '- Do not invent values. Skip uncertain fields.',
+    '- Use exact section and field names from FIELD CATALOG.',
+    '- For non-table fields use action "set".',
+    '- For table fields use action "add_row" and include value object with the required table column keys.',
+    '- For select/multi-select fields, use only listed options exactly.',
+    '- For date fields use YYYY-MM-DD only when explicit.',
+    '- Avoid duplicate updates for the same scalar field.',
+    '- Keep notes concise and factual.',
+    '',
+    'FIELD CATALOG:',
+    JSON.stringify(FIELD_CATALOG, null, 2),
+    '',
+    'DOCUMENTS:',
+    JSON.stringify(docsWithText, null, 2),
+  ].join('\n');
+
+  const completion = await client.chat.completions.create({
+    model,
+    temperature: 0.1,
+    max_tokens: 5000,
+    response_format: { type: 'json_object' },
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = completion.choices[0]?.message?.content || '{}';
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    parsed = {};
+  }
+
+  const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  return {
+    fieldUpdates: sanitizeExtractedFieldUpdates(record.fieldUpdates),
+    notes: sanitizeExtractionNotes(record.notes),
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Partial<ProcessDocumentsPayload>;
@@ -184,7 +461,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'files are required' }, { status: 400 });
     }
 
-    const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-4o';
+    const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-5-chat-latest';
     const client = getOpenAIClient();
     const parsedDocuments: ParsedDocument[] = [];
 
@@ -263,10 +540,22 @@ export async function POST(request: NextRequest) {
       };
     }
 
+    let fieldUpdates: FieldUpdate[] = [];
+    let prefillNotes: string[] = [];
+    try {
+      const extracted = await extractPrefillFieldUpdates(client, model, parsedDocuments);
+      fieldUpdates = extracted.fieldUpdates;
+      prefillNotes = extracted.notes;
+    } catch (error) {
+      console.error('process-docs: failed to extract prefill field updates', error);
+    }
+
     return NextResponse.json({
       documents: parsedDocuments,
       overallCoverage,
       gaps,
+      fieldUpdates,
+      prefillNotes,
     });
   } catch (error) {
     console.error('process-docs route error:', error);

@@ -15,6 +15,8 @@ export function StepUpload() {
   const sessionMode = useIntakeStore((s) => s.sessionMode);
   const uploadedFiles = useIntakeStore((s) => s.uploadedFiles);
   const coverageAnalysis = useIntakeStore((s) => s.coverageAnalysis);
+  const applyFieldUpdates = useIntakeStore((s) => s.applyFieldUpdates);
+  const addMessage = useIntakeStore((s) => s.addMessage);
   const addUploadedFile = useIntakeStore((s) => s.addUploadedFile);
   const updateFileStatus = useIntakeStore((s) => s.updateFileStatus);
   const removeUploadedFile = useIntakeStore((s) => s.removeUploadedFile);
@@ -68,6 +70,26 @@ export function StepUpload() {
         gaps: result.gaps,
       });
 
+      if (result.fieldUpdates.length > 0) {
+        applyFieldUpdates(result.fieldUpdates);
+
+        const remainingCount = useIntakeStore.getState().getUnfilledFields().length;
+        addMessage({
+          id: `system-doc-prefill-${Date.now()}`,
+          role: 'system',
+          content: `Document prefill applied ${result.fieldUpdates.length} field updates. ${remainingCount} fields remain for intake follow-up.`,
+          timestamp: Date.now(),
+        });
+      } else {
+        addMessage({
+          id: `system-doc-prefill-none-${Date.now()}`,
+          role: 'system',
+          content:
+            'Documents were processed, but no high-confidence field values were extracted. The intake chat will collect remaining details.',
+          timestamp: Date.now(),
+        });
+      }
+
       // Mark files parsed when returned by backend, otherwise keep as error for visibility.
       const parsedNames = new Set(result.documents.map((d) => d.filename.toLowerCase()));
       for (const file of currentFiles) {
@@ -90,6 +112,8 @@ export function StepUpload() {
     }
   }, [
     isProcessing,
+    applyFieldUpdates,
+    addMessage,
     setParsedDocuments,
     setCoverageAnalysis,
     updateFileStatus,
@@ -286,7 +310,7 @@ export function StepUpload() {
           <p className="text-xs text-muted-foreground">
             Gaps identified above will be flagged in the generated report. You can address
             them by uploading additional documents or providing information during the
-            intake interview in Step 1.
+            intake interview in Step 2.
           </p>
         </div>
       )}

@@ -37,7 +37,7 @@ export const REQUIRED_FIELDS = new Set<string>([
   'modelDesign.estimationMethodology',
 ]);
 
-// Minimum required fields for Step 1 → Step 2 transition
+// Minimum required fields before report generation (after intake follow-up)
 export const STEP1_REQUIRED_FIELDS = new Set<string>([
   'modelSummary.modelType',
   'modelSummary.modelOwner',
