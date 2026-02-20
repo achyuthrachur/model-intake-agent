@@ -98,14 +98,28 @@ function buildPrompt(
     filename: doc.filename,
     sectionsCovered: doc.sectionsCovered,
     documentSummary: doc.documentSummary,
-    excerpt: doc.extractedText.slice(0, 1800),
+    excerpt: doc.extractedText.slice(0, 4500),
+    coverageDetail: Object.entries(doc.coverageDetail).map(([sectionId, detail]) => ({
+      sectionId,
+      covered: detail.covered,
+      confidence: detail.confidence,
+      summary: detail.summary,
+    })),
   }));
 
-  const sectionTargets = SECTION_ORDER.filter((section) => section.id !== 'model_summary');
+  const sectionTargets = TEMPLATE_SECTIONS
+    .filter((section) => section.id !== 'model_summary')
+    .map((section) => ({
+      id: section.id,
+      title: section.title,
+      parentSection: section.parentSection ?? '',
+      description: section.description,
+    }));
 
   return [
     `You are generating a formal bank model documentation report for ${bankName}.`,
-    'Use intake data first, supplement with document evidence when available.',
+    'You are a senior model risk documentation writer and must produce detailed, section-accurate content.',
+    'Use intake data and document evidence together. Do not write boilerplate or generic filler.',
     '',
     'Return strict JSON only with this shape:',
     '{',
@@ -118,12 +132,19 @@ function buildPrompt(
     '',
     'Requirements:',
     '- Include every requested section ID exactly once.',
-    '- Keep section content concise and professional (1-3 paragraphs).',
+    '- Match each section to its specific title and description from the section plan below.',
+    '- Do not shift implementation text into back-testing sections, or governance text into design sections.',
+    '- Narrative sections should be detailed and specific (typically 2-4 substantive paragraphs, ~120-260 words per section).',
+    '- Explicitly reference concrete model/process details (methods, controls, cadence, data lineage, thresholds, ownership) when available.',
+    '- If using document evidence, cite source filename inline, e.g. "(Source: Vendor_Implementation_Production_Runbook.pdf)".',
+    '- Avoid vague claims such as "controls are in place" unless supported by intake or document evidence.',
     '- If data is missing, use: [Information not provided - to be completed by model owner].',
-    '- For section 1.4 produce a markdown assumptions table.',
-    '- For section 1.5 produce a markdown limitations table with Mitigating Risk.',
+    '- For section 1.4 produce a markdown assumptions table with columns: Assumption | Evidence | Operational Impact.',
+    '- For section 1.5 produce a markdown limitations table with columns: Limitation | Impact | Mitigating Risk.',
+    '- For section 7.3 produce a markdown references table with columns: Name | Type | Description.',
     '',
-    `Requested section IDs: ${sectionTargets.map((section) => section.id).join(', ')}`,
+    'SECTION PLAN (authoritative mapping for IDs):',
+    JSON.stringify(sectionTargets, null, 2),
     '',
     'INTAKE DATA:',
     JSON.stringify(intakeData, null, 2),
@@ -162,7 +183,7 @@ export async function POST(request: NextRequest) {
     }
 
     const parsedDocuments = sanitizeParsedDocuments(body.parsedDocuments);
-    const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-4o';
+    const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-5-chat-latest';
     const client = getOpenAIClient();
 
     const modelSummaryContent = buildModelSummaryTable(intakeData as IntakeFormState);
@@ -170,8 +191,8 @@ export async function POST(request: NextRequest) {
 
     const completion = await client.chat.completions.create({
       model,
-      temperature: 0.4,
-      max_tokens: 5000,
+      temperature: 0.25,
+      max_tokens: 9000,
       response_format: { type: 'json_object' },
       messages: [{ role: 'user', content: prompt }],
     });

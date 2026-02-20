@@ -37,4 +37,24 @@ describe('parseFieldUpdates', () => {
     expect(result.fieldUpdates).toHaveLength(0);
     expect(result.cleanReply).toContain('Keep going with intake.');
   });
+
+  it('collapses excessive blank lines in clean reply', () => {
+    const aiResponse = [
+      'Thank you for providing the model name and type.',
+      '',
+      '',
+      '',
+      '<<<FIELD_UPDATE>>>{"section":"model_summary","field":"model_type","value":"Credit Risk","action":"set"}<<<END_FIELD_UPDATE>>>',
+      '',
+      '',
+      '',
+      'Next, could you specify the estimation technique used in this model?',
+    ].join('\n');
+
+    const result = parseFieldUpdates(aiResponse);
+
+    expect(result.cleanReply).toBe(
+      'Thank you for providing the model name and type.\n\nNext, could you specify the estimation technique used in this model?',
+    );
+  });
 });

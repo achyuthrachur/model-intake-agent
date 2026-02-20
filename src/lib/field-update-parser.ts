@@ -26,6 +26,9 @@ export function parseFieldUpdates(aiResponse: string): ParseResult {
 
   const cleanReply = aiResponse
     .replace(/<<<FIELD_UPDATE>>>[\s\S]*?<<<END_FIELD_UPDATE>>>/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
   return { cleanReply, fieldUpdates };

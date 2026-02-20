@@ -94,6 +94,8 @@ export function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="gpt-5-chat-latest">GPT-5 Chat (Best Writing)</SelectItem>
+                <SelectItem value="gpt-4.1">GPT-4.1</SelectItem>
                 <SelectItem value="gpt-4o">GPT-4o</SelectItem>
                 <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
               </SelectContent>
