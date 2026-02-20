@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import type { ChatMessage } from '@/types';
 
+const CHAT_REQUEST_TIMEOUT_MS = 45000;
+
 const INITIAL_GREETING: ChatMessage = {
   id: 'greeting-1',
   role: 'assistant',
@@ -24,6 +26,24 @@ const INITIAL_GREETING: ChatMessage = {
     "Hello! I'm your AI assistant for the model intake process. I'll help you document your model by asking targeted questions about its design, data, performance, and governance.\n\nLet's start with the basics. Can you tell me the name and type of the model you're documenting? For example, is it a credit risk model, a pricing model, an ALM model, or something else?",
   timestamp: Date.now(),
 };
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`Chat request timed out after ${Math.round(timeoutMs / 1000)}s`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error: unknown) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
 
 export function StepIntake() {
   const store = useIntakeStore();
@@ -78,6 +98,7 @@ export function StepIntake() {
       const trimmed = text.trim();
       if (!trimmed) return false;
 
+      const stateBeforeSend = useIntakeStore.getState();
       const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
         role: 'user',
@@ -90,17 +111,19 @@ export function StepIntake() {
       store.setIsStreaming(true);
 
       try {
-        const latestState = useIntakeStore.getState();
         const config = {
-          selectedModel: latestState.selectedModel,
-          useMockData: latestState.sessionMode === 'mock',
+          selectedModel: stateBeforeSend.selectedModel,
+          useMockData: stateBeforeSend.sessionMode === 'mock',
         };
 
-        const response = await sendChatMessage(
-          config,
-          trimmed,
-          latestState.messages,
-          latestState.formData,
+        const response = await withTimeout(
+          sendChatMessage(
+            config,
+            trimmed,
+            stateBeforeSend.messages,
+            stateBeforeSend.formData,
+          ),
+          CHAT_REQUEST_TIMEOUT_MS,
         );
 
         const assistantMessage: ChatMessage = {
@@ -160,6 +183,11 @@ export function StepIntake() {
         : [],
     [store.sessionMode, store.messages, demoAnswers],
   );
+  const fullDemoReplies = useMemo(
+    () => (store.sessionMode === 'demo' ? buildRemainingDemoAnswerBatch([], demoAnswers) : []),
+    [store.sessionMode, demoAnswers],
+  );
+  const batchCandidates = remainingDemoReplies.length > 0 ? remainingDemoReplies : fullDemoReplies;
 
   const handleRetry = () => {
     if (isBatchFilling) return;
@@ -171,33 +199,49 @@ export function StepIntake() {
   const handleBatchFillRemaining = useCallback(async () => {
     if (store.sessionMode !== 'demo') return;
     if (store.isStreaming || isBatchFilling) return;
-    if (remainingDemoReplies.length === 0) return;
+    if (batchCandidates.length === 0) return;
 
     setIsBatchFilling(true);
-    setBatchProgress({ completed: 0, total: remainingDemoReplies.length });
+    setBatchProgress({ completed: 0, total: batchCandidates.length });
+    let failures = 0;
 
     try {
-      for (let idx = 0; idx < remainingDemoReplies.length; idx += 1) {
+      for (let idx = 0; idx < batchCandidates.length; idx += 1) {
         if (useIntakeStore.getState().sessionMode !== 'demo') {
           break;
         }
 
-        const success = await sendIntakeReply(remainingDemoReplies[idx], {
+        const success = await sendIntakeReply(batchCandidates[idx], {
           deferRecentUpdateClear: true,
         });
-        setBatchProgress({ completed: idx + 1, total: remainingDemoReplies.length });
+        setBatchProgress({ completed: idx + 1, total: batchCandidates.length });
 
         if (!success) {
-          break;
+          failures += 1;
         }
       }
     } finally {
+      if (failures > 0) {
+        store.addMessage({
+          id: `system-batch-fill-${Date.now()}`,
+          role: 'system',
+          content: `Batch fill completed with ${failures} failed request(s). You can click the batch button again to continue.`,
+          timestamp: Date.now(),
+        });
+      }
       setIsBatchFilling(false);
       setTimeout(() => {
         useIntakeStore.getState().clearRecentUpdates();
       }, 3000);
     }
-  }, [store.sessionMode, store.isStreaming, isBatchFilling, remainingDemoReplies, sendIntakeReply]);
+  }, [
+    store,
+    store.sessionMode,
+    store.isStreaming,
+    isBatchFilling,
+    batchCandidates,
+    sendIntakeReply,
+  ]);
 
   return (
     <div
@@ -234,9 +278,13 @@ export function StepIntake() {
               variant="outline"
               size="sm"
               onClick={handleBatchFillRemaining}
-              disabled={store.isStreaming || isBatchFilling || remainingDemoReplies.length === 0}
+              disabled={store.isStreaming || isBatchFilling || batchCandidates.length === 0}
             >
-              {isBatchFilling ? 'Batch Filling...' : 'Batch Fill Remaining'}
+              {isBatchFilling
+                ? 'Batch Filling...'
+                : remainingDemoReplies.length > 0
+                  ? 'Batch Fill Remaining'
+                  : 'Batch Fill Again'}
             </Button>
           </div>
         )}
