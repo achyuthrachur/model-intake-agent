@@ -1,9 +1,14 @@
-﻿'use client';
+'use client';
 
-import { useEffect, useCallback, useRef, useState } from 'react';
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { sendChatMessage } from '@/lib/api-client';
-import { loadDemoAnswers, selectSuggestedDemoMessage, type DemoAnswerEntry } from '@/lib/demo-answers';
+import {
+  buildRemainingDemoAnswerBatch,
+  loadDemoAnswers,
+  selectSuggestedDemoMessage,
+  type DemoAnswerEntry,
+} from '@/lib/demo-answers';
 import { useAnimeStagger } from '@/lib/anime-motion';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { ChatInput } from '@/components/chat/ChatInput';
@@ -25,6 +30,8 @@ export function StepIntake() {
   const lastUserMessageRef = useRef<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const [demoAnswers, setDemoAnswers] = useState<DemoAnswerEntry[]>([]);
+  const [isBatchFilling, setIsBatchFilling] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ completed: number; total: number } | null>(null);
 
   useAnimeStagger(rootRef, [store.messages.length, store.isStreaming], '[data-reveal]', {
     delay: 60,
@@ -66,36 +73,36 @@ export function StepIntake() {
     };
   }, [store.sessionMode]);
 
-  const handleSend = useCallback(
-    async (text: string) => {
-      // 1. Add user message to store
+  const sendIntakeReply = useCallback(
+    async (text: string, options?: { deferRecentUpdateClear?: boolean }): Promise<boolean> => {
+      const trimmed = text.trim();
+      if (!trimmed) return false;
+
       const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
         role: 'user',
-        content: text,
+        content: trimmed,
         timestamp: Date.now(),
       };
       store.addMessage(userMessage);
-      lastUserMessageRef.current = text;
+      lastUserMessageRef.current = trimmed;
 
-      // 2. Set streaming state
       store.setIsStreaming(true);
 
       try {
-        // 3. Call sendChatMessage with config from store
+        const latestState = useIntakeStore.getState();
         const config = {
-          selectedModel: store.selectedModel,
-          useMockData: store.sessionMode === 'mock',
+          selectedModel: latestState.selectedModel,
+          useMockData: latestState.sessionMode === 'mock',
         };
 
         const response = await sendChatMessage(
           config,
-          text,
-          store.messages,
-          store.formData,
+          trimmed,
+          latestState.messages,
+          latestState.formData,
         );
 
-        // 4. Add AI response to store with fieldUpdates
         const assistantMessage: ChatMessage = {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
@@ -105,12 +112,12 @@ export function StepIntake() {
         };
         store.addMessage(assistantMessage);
 
-        // 5. Apply field updates
         if (response.fieldUpdates.length > 0) {
           store.applyFieldUpdates(response.fieldUpdates);
         }
+
+        return true;
       } catch (error) {
-        // Add error message as system message with retry hint
         const errorMessage: ChatMessage = {
           id: `error-${Date.now()}`,
           role: 'system',
@@ -118,23 +125,26 @@ export function StepIntake() {
           timestamp: Date.now(),
         };
         store.addMessage(errorMessage);
+        return false;
       } finally {
-        // 6. Set streaming false
         store.setIsStreaming(false);
 
-        // 7. Clear recent updates after 3 seconds
-        setTimeout(() => {
-          store.clearRecentUpdates();
-        }, 3000);
+        if (!options?.deferRecentUpdateClear) {
+          setTimeout(() => {
+            useIntakeStore.getState().clearRecentUpdates();
+          }, 3000);
+        }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      store.selectedModel,
-      store.sessionMode,
-      store.messages,
-      store.formData,
-    ],
+    [store],
+  );
+
+  const handleSend = useCallback(
+    async (text: string) => {
+      if (isBatchFilling) return;
+      await sendIntakeReply(text);
+    },
+    [isBatchFilling, sendIntakeReply],
   );
 
   const lastMessageIsError =
@@ -143,12 +153,51 @@ export function StepIntake() {
     store.sessionMode === 'demo'
       ? selectSuggestedDemoMessage(store.messages, demoAnswers)
       : undefined;
+  const remainingDemoReplies = useMemo(
+    () =>
+      store.sessionMode === 'demo'
+        ? buildRemainingDemoAnswerBatch(store.messages, demoAnswers)
+        : [],
+    [store.sessionMode, store.messages, demoAnswers],
+  );
 
   const handleRetry = () => {
+    if (isBatchFilling) return;
     if (lastUserMessageRef.current) {
-      handleSend(lastUserMessageRef.current);
+      void handleSend(lastUserMessageRef.current);
     }
   };
+
+  const handleBatchFillRemaining = useCallback(async () => {
+    if (store.sessionMode !== 'demo') return;
+    if (store.isStreaming || isBatchFilling) return;
+    if (remainingDemoReplies.length === 0) return;
+
+    setIsBatchFilling(true);
+    setBatchProgress({ completed: 0, total: remainingDemoReplies.length });
+
+    try {
+      for (let idx = 0; idx < remainingDemoReplies.length; idx += 1) {
+        if (useIntakeStore.getState().sessionMode !== 'demo') {
+          break;
+        }
+
+        const success = await sendIntakeReply(remainingDemoReplies[idx], {
+          deferRecentUpdateClear: true,
+        });
+        setBatchProgress({ completed: idx + 1, total: remainingDemoReplies.length });
+
+        if (!success) {
+          break;
+        }
+      }
+    } finally {
+      setIsBatchFilling(false);
+      setTimeout(() => {
+        useIntakeStore.getState().clearRecentUpdates();
+      }, 3000);
+    }
+  }, [store.sessionMode, store.isStreaming, isBatchFilling, remainingDemoReplies, sendIntakeReply]);
 
   return (
     <div
@@ -162,15 +211,38 @@ export function StepIntake() {
         </div>
         {lastMessageIsError && !store.isStreaming && (
           <div className="flex justify-center border-t border-border/70 bg-destructive/6 py-2">
-            <Button variant="outline" size="sm" className="gap-2" onClick={handleRetry}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleRetry}
+              disabled={isBatchFilling}
+            >
               <RefreshCw className="h-3.5 w-3.5" />
               Retry Last Message
             </Button>
           </div>
         )}
+        {store.sessionMode === 'demo' && (
+          <div className="flex items-center justify-between gap-3 border-t border-border/70 bg-muted/35 px-4 py-2">
+            <p className="text-[11px] text-muted-foreground">
+              {isBatchFilling && batchProgress
+                ? `Batch filling demo answers (${batchProgress.completed}/${batchProgress.total})`
+                : 'Demo shortcut: use suggested replies or batch-fill all remaining answers.'}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBatchFillRemaining}
+              disabled={store.isStreaming || isBatchFilling || remainingDemoReplies.length === 0}
+            >
+              {isBatchFilling ? 'Batch Filling...' : 'Batch Fill Remaining'}
+            </Button>
+          </div>
+        )}
         <ChatInput
           onSend={handleSend}
-          disabled={store.isStreaming}
+          disabled={store.isStreaming || isBatchFilling}
           suggestedMessage={suggestedMessage}
         />
       </div>
@@ -182,4 +254,3 @@ export function StepIntake() {
     </div>
   );
 }
-

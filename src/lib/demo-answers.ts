@@ -307,3 +307,41 @@ export function selectSuggestedDemoMessage(
   const selected = selectEntryForQuestion(latestAssistantQuestion, answers, state);
   return selected?.text;
 }
+
+function normalizeAnswerText(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+export function buildRemainingDemoAnswerBatch(
+  messages: ChatMessage[],
+  answers: DemoAnswerEntry[],
+): string[] {
+  if (answers.length === 0) return [];
+
+  const usedUserReplies = new Set(
+    messages
+      .filter((message) => message.role === 'user')
+      .map((message) => normalizeAnswerText(message.content))
+      .filter((content) => content.length > 0),
+  );
+
+  const orderedAnswers = [
+    ...answers.filter((entry) => !entry.intents.includes('fallback')),
+    ...answers.filter((entry) => entry.intents.includes('fallback')),
+  ];
+
+  const batch: string[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of orderedAnswers) {
+    const normalized = normalizeAnswerText(entry.text);
+    if (!normalized) continue;
+    if (usedUserReplies.has(normalized)) continue;
+    if (seen.has(normalized)) continue;
+
+    seen.add(normalized);
+    batch.push(entry.text.trim());
+  }
+
+  return batch;
+}

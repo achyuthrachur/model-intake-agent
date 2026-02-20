@@ -1,4 +1,8 @@
-import { selectSuggestedDemoMessage, type DemoAnswerEntry } from '@/lib/demo-answers';
+import {
+  buildRemainingDemoAnswerBatch,
+  selectSuggestedDemoMessage,
+  type DemoAnswerEntry,
+} from '@/lib/demo-answers';
 import type { ChatMessage } from '@/types';
 
 function msg(
@@ -90,5 +94,38 @@ describe('demo answer selector', () => {
 
     const suggested = selectSuggestedDemoMessage(messages, ANSWERS);
     expect(suggested).toBe('Developer and owner answer');
+  });
+
+  it('builds a remaining batch and skips replies already sent by user', () => {
+    const messages: ChatMessage[] = [
+      msg('assistant', 'Can you tell me the name and type of the model?', 'a1'),
+      msg('user', 'Model type answer', 'u1'),
+      msg('assistant', 'Who is the model owner?', 'a2'),
+    ];
+
+    const batch = buildRemainingDemoAnswerBatch(messages, ANSWERS);
+
+    expect(batch).toEqual([
+      'Developer and owner answer',
+      'Regulatory answer',
+      'Fallback answer one',
+      'Fallback answer two',
+    ]);
+  });
+
+  it('deduplicates duplicate answer text in batch mode', () => {
+    const duplicatedAnswers: DemoAnswerEntry[] = [
+      ...ANSWERS,
+      {
+        id: 'duplicate_regulatory',
+        intents: ['regulatory_standards'],
+        text: 'Regulatory answer',
+      },
+    ];
+
+    const batch = buildRemainingDemoAnswerBatch([], duplicatedAnswers);
+    const regulatoryCount = batch.filter((entry) => entry === 'Regulatory answer').length;
+
+    expect(regulatoryCount).toBe(1);
   });
 });
