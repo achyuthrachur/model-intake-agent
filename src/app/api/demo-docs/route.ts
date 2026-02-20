@@ -12,6 +12,7 @@ interface DemoDocumentManifestEntry {
 }
 
 const DEMO_DOCUMENTS_DIR = path.join(process.cwd(), 'Demo Documents');
+const DEMO_WORD_EXTENSIONS = new Set(['.docx', '.doc']);
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -49,6 +50,7 @@ async function readManifest(): Promise<DemoDocumentManifestEntry[]> {
   return entries
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
+    .filter((filename) => DEMO_WORD_EXTENSIONS.has(path.extname(filename).toLowerCase()))
     .sort((a, b) => a.localeCompare(b))
     .map((filename) => ({
       filename,

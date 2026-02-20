@@ -199,6 +199,22 @@ export interface CoverageEntry {
   summary: string;
 }
 
+export interface PrefillDiagnosticsPass {
+  pass: string;
+  requestedFields: number;
+  extractedUpdates: number;
+  noteCount: number;
+  docCount: number;
+}
+
+export interface PrefillDiagnostics {
+  requestedFields: number;
+  extractedUpdates: number;
+  scalarFieldsFilled: number;
+  tableRowsAdded: number;
+  passes: PrefillDiagnosticsPass[];
+}
+
 export interface CoverageAnalysis {
   overallCoverage: Record<string, {
     status: 'covered' | 'partial' | 'gap';
@@ -206,6 +222,7 @@ export interface CoverageAnalysis {
     confidence?: 'high' | 'medium' | 'low';
   }>;
   gaps: string[];
+  prefillDiagnostics?: PrefillDiagnostics;
 }
 
 // --- Report Types ---

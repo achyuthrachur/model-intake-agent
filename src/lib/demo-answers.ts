@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@/types';
+import type { ChatMessage, IntakeFormState } from '@/types';
 
 export type DemoAnswerIntent =
   | 'model_type'
@@ -149,6 +149,56 @@ const INTENT_RULES: Array<{ intent: DemoAnswerIntent; patterns: RegExp[] }> = [
   },
 ];
 
+const INTENT_FIELD_PATHS: Partial<Record<DemoAnswerIntent, string[]>> = {
+  model_type: ['modelSummary.modelType'],
+  estimation_technique: ['modelSummary.estimationTechnique'],
+  model_developer: ['modelSummary.modelDeveloper'],
+  model_owner: ['modelSummary.modelOwner'],
+  risk_rating: ['modelSummary.riskRating'],
+  validation_details: [
+    'modelSummary.modelValidator',
+    'modelSummary.dateOfValidation',
+    'modelSummary.validationRating',
+  ],
+  model_usage: ['modelSummary.modelUsage'],
+  business_purpose: ['executiveSummary.businessPurpose'],
+  regulatory_standards: ['modelSummary.policyCoverage', 'executiveSummary.regulatoryStandards'],
+  business_units: ['executiveSummary.businessUnits'],
+  upstream_downstream: [
+    'modelSummary.upstreamModels',
+    'modelSummary.downstreamModels',
+    'executiveSummary.modelInterdependencies',
+  ],
+  key_model_drivers: ['executiveSummary.keyModelDrivers'],
+  data_sources: [
+    'executiveSummary.dataSourcesSummary',
+    'developmentData.internalDataSources',
+    'developmentData.externalData',
+  ],
+  output_description: ['executiveSummary.outputDescription'],
+  scenario_governance: ['modelDesign.adjustmentsDescription', 'performance.adjustmentsDetails'],
+  assumptions_limitations: ['executiveSummary.assumptions', 'executiveSummary.limitations'],
+  monitoring: [
+    'outputUse.monitoringApproach',
+    'outputUse.monitoringFrequency',
+    'performance.reportingFrequency',
+  ],
+  change_management: ['implementation.changeManagement', 'implementation.versionReleaseProcess'],
+  contingency: ['governance.fallbackProcess', 'governance.contingencyDetails'],
+};
+
+const FIELD_PATH_TO_INTENTS: Map<string, DemoAnswerIntent[]> = new Map();
+for (const [intent, paths] of Object.entries(INTENT_FIELD_PATHS) as Array<
+  [DemoAnswerIntent, string[] | undefined]
+>) {
+  if (!paths) continue;
+  for (const path of paths) {
+    const current = FIELD_PATH_TO_INTENTS.get(path) ?? [];
+    current.push(intent);
+    FIELD_PATH_TO_INTENTS.set(path, current);
+  }
+}
+
 let demoAnswersCache: DemoAnswerEntry[] | null = null;
 
 function sanitizeIntent(value: unknown): DemoAnswerIntent | null {
@@ -257,6 +307,119 @@ function extractQuestionSentences(content: string): string[] {
     .filter((entry) => entry.endsWith('?'));
 }
 
+function getValueAtPath(formState: IntakeFormState, path: string): unknown {
+  const [sectionKey, fieldKey] = path.split('.');
+  if (!sectionKey || !fieldKey) return undefined;
+
+  const section = (formState as unknown as Record<string, unknown>)[sectionKey];
+  if (!section || typeof section !== 'object') return undefined;
+
+  return (section as Record<string, unknown>)[fieldKey];
+}
+
+function formatValueForSuggestion(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    const hasObjectRows = value.some((entry) => entry && typeof entry === 'object');
+    if (hasObjectRows) {
+      return `${value.length} documented row${value.length === 1 ? '' : 's'}`;
+    }
+
+    const asText = value
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0)
+      .join(', ');
+    return asText.length > 0 ? asText : null;
+  }
+
+  if (value && typeof value === 'object') {
+    const serialized = JSON.stringify(value);
+    return serialized.length > 0 ? serialized : null;
+  }
+
+  return null;
+}
+
+function humanizeFieldPath(path: string): string {
+  const field = path.split('.').slice(-1)[0] ?? path;
+  return field.replace(/([A-Z])/g, ' $1').replace(/^./, (ch) => ch.toUpperCase());
+}
+
+function buildPrefilledSuggestion(
+  intents: DemoAnswerIntent[],
+  formState?: IntakeFormState,
+): string | undefined {
+  if (!formState) return undefined;
+
+  const lines: string[] = [];
+  const seenPaths = new Set<string>();
+
+  for (const intent of intents) {
+    const paths = INTENT_FIELD_PATHS[intent] ?? [];
+    for (const path of paths) {
+      if (seenPaths.has(path)) continue;
+      seenPaths.add(path);
+
+      const value = getValueAtPath(formState, path);
+      const formatted = formatValueForSuggestion(value);
+      if (!formatted) continue;
+
+      lines.push(`${humanizeFieldPath(path)}: ${formatted}`);
+    }
+  }
+
+  if (lines.length === 0) return undefined;
+  const summary = lines.join(' ');
+  return summary.length > 520 ? `${summary.slice(0, 517)}...` : summary;
+}
+
+function collectUnfilledFieldPaths(formState: IntakeFormState): string[] {
+  const unfilled: string[] = [];
+
+  for (const [sectionKey, sectionValue] of Object.entries(formState)) {
+    if (!sectionValue || typeof sectionValue !== 'object') continue;
+
+    for (const [fieldKey, fieldValue] of Object.entries(sectionValue as Record<string, unknown>)) {
+      if (fieldValue === undefined || fieldValue === null) {
+        unfilled.push(`${sectionKey}.${fieldKey}`);
+        continue;
+      }
+
+      if (typeof fieldValue === 'string' && fieldValue.trim().length === 0) {
+        unfilled.push(`${sectionKey}.${fieldKey}`);
+        continue;
+      }
+
+      if (Array.isArray(fieldValue) && fieldValue.length === 0) {
+        unfilled.push(`${sectionKey}.${fieldKey}`);
+      }
+    }
+  }
+
+  return unfilled;
+}
+
+function inferMissingIntents(formState?: IntakeFormState): Set<DemoAnswerIntent> {
+  const intents = new Set<DemoAnswerIntent>();
+  if (!formState) return intents;
+
+  const unfilledPaths = collectUnfilledFieldPaths(formState);
+  for (const path of unfilledPaths) {
+    const mappedIntents = FIELD_PATH_TO_INTENTS.get(path) ?? [];
+    for (const intent of mappedIntents) {
+      intents.add(intent);
+    }
+  }
+
+  return intents;
+}
+
 interface SelectionState {
   fallbackIndex: number;
 }
@@ -287,6 +450,7 @@ function selectEntryForQuestion(
 export function selectSuggestedDemoMessage(
   messages: ChatMessage[],
   answers: DemoAnswerEntry[],
+  formState?: IntakeFormState,
 ): string | undefined {
   if (answers.length === 0) return undefined;
 
@@ -304,6 +468,12 @@ export function selectSuggestedDemoMessage(
     }
   }
 
+  const latestIntents = inferIntents(latestAssistantQuestion);
+  const prefilledSuggestion = buildPrefilledSuggestion(latestIntents, formState);
+  if (prefilledSuggestion) {
+    return prefilledSuggestion;
+  }
+
   const selected = selectEntryForQuestion(latestAssistantQuestion, answers, state);
   return selected?.text;
 }
@@ -315,9 +485,12 @@ function normalizeAnswerText(value: string): string {
 export function buildRemainingDemoAnswerBatch(
   messages: ChatMessage[],
   answers: DemoAnswerEntry[],
+  formState?: IntakeFormState,
 ): string[] {
   if (answers.length === 0) return [];
 
+  const missingIntents = inferMissingIntents(formState);
+  const useIntentFilter = missingIntents.size > 0;
   const usedUserReplies = new Set(
     messages
       .filter((message) => message.role === 'user')
@@ -336,11 +509,25 @@ export function buildRemainingDemoAnswerBatch(
   for (const entry of orderedAnswers) {
     const normalized = normalizeAnswerText(entry.text);
     if (!normalized) continue;
-    if (usedUserReplies.has(normalized)) continue;
+    if (!formState && usedUserReplies.has(normalized)) continue;
     if (seen.has(normalized)) continue;
+    if (
+      useIntentFilter &&
+      !entry.intents.includes('fallback') &&
+      !entry.intents.some((intent) => missingIntents.has(intent))
+    ) {
+      continue;
+    }
 
     seen.add(normalized);
     batch.push(entry.text.trim());
+  }
+
+  if (batch.length === 0 && useIntentFilter) {
+    return answers
+      .filter((entry) => entry.intents.includes('fallback'))
+      .map((entry) => entry.text.trim())
+      .filter((text) => text.length > 0);
   }
 
   return batch;

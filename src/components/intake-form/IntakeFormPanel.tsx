@@ -28,6 +28,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+const CLEAR_SELECT_VALUE = '__clear_selection__';
+
 // ---------------------------------------------------------------------------
 // Helper: generate a UUID (v4-ish, crypto-safe when available)
 // ---------------------------------------------------------------------------
@@ -191,14 +193,16 @@ function SectionFields({ schema }: SectionFieldsProps) {
                 <Select
                   value={(currentValue as string) ?? ''}
                   onValueChange={(val) => {
-                    updateField(sectionKey, field.name, val);
-                    addManualEditSystemMessage(sectionKey, field.name, val);
+                    const nextValue = val === CLEAR_SELECT_VALUE ? '' : val;
+                    updateField(sectionKey, field.name, nextValue);
+                    addManualEditSystemMessage(sectionKey, field.name, nextValue);
                   }}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder={field.placeholder ?? 'Select...'} />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={CLEAR_SELECT_VALUE}>[Clear selection]</SelectItem>
                     {field.options?.map((option) => (
                       <SelectItem key={option} value={option}>
                         {option}
@@ -217,16 +221,30 @@ function SectionFields({ schema }: SectionFieldsProps) {
             <div key={fieldKey} className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">{field.label}{isRequired && <span className="text-destructive"> *</span>}</label>
               <div className={cn(pulsing && 'field-pulse', 'rounded-md')}>
-                <Input
-                  type="date"
-                  value={(currentValue as string) ?? ''}
-                  placeholder={field.placeholder}
-                  onChange={(e) => {
-                    markDirty(field.name);
-                    updateField(sectionKey, field.name, e.target.value);
-                  }}
-                  onBlur={(e) => flushDirty(field.name, field.name, e.target.value)}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={(currentValue as string) ?? ''}
+                    placeholder={field.placeholder}
+                    onChange={(e) => {
+                      markDirty(field.name);
+                      updateField(sectionKey, field.name, e.target.value);
+                    }}
+                    onBlur={(e) => flushDirty(field.name, field.name, e.target.value)}
+                  />
+                  {typeof currentValue === 'string' && currentValue.trim().length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        updateField(sectionKey, field.name, '');
+                        addManualEditSystemMessage(sectionKey, field.name, '');
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           );

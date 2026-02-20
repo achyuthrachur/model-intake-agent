@@ -6,6 +6,7 @@ import type {
   CoverageAnalysis,
   GeneratedReport,
   AIModel,
+  PrefillDiagnostics,
 } from '@/types';
 import { mockSendChatMessage, mockProcessDocuments, mockGenerateReport } from './mock-client';
 import { parseFieldUpdates } from './field-update-parser';
@@ -38,6 +39,7 @@ interface DocumentProcessingResponse {
   gaps: string[];
   fieldUpdates: FieldUpdate[];
   prefillNotes: string[];
+  prefillDiagnostics: PrefillDiagnostics;
 }
 
 interface IntakeChatPayload {
@@ -75,6 +77,64 @@ interface RawProcessDocumentsApiResponse {
   gaps?: unknown;
   fieldUpdates?: unknown;
   prefillNotes?: unknown;
+  prefillDiagnostics?: unknown;
+}
+
+function sanitizePrefillDiagnostics(raw: unknown): PrefillDiagnostics {
+  const empty: PrefillDiagnostics = {
+    requestedFields: 0,
+    extractedUpdates: 0,
+    scalarFieldsFilled: 0,
+    tableRowsAdded: 0,
+    passes: [],
+  };
+
+  if (!raw || typeof raw !== 'object') {
+    return empty;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const rawPasses = Array.isArray(record.passes) ? record.passes : [];
+
+  return {
+    requestedFields:
+      typeof record.requestedFields === 'number' && Number.isFinite(record.requestedFields)
+        ? record.requestedFields
+        : 0,
+    extractedUpdates:
+      typeof record.extractedUpdates === 'number' && Number.isFinite(record.extractedUpdates)
+        ? record.extractedUpdates
+        : 0,
+    scalarFieldsFilled:
+      typeof record.scalarFieldsFilled === 'number' && Number.isFinite(record.scalarFieldsFilled)
+        ? record.scalarFieldsFilled
+        : 0,
+    tableRowsAdded:
+      typeof record.tableRowsAdded === 'number' && Number.isFinite(record.tableRowsAdded)
+        ? record.tableRowsAdded
+        : 0,
+    passes: rawPasses
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const pass = entry as Record<string, unknown>;
+        if (typeof pass.pass !== 'string') return null;
+
+        return {
+          pass: pass.pass,
+          requestedFields:
+            typeof pass.requestedFields === 'number' && Number.isFinite(pass.requestedFields)
+              ? pass.requestedFields
+              : 0,
+          extractedUpdates:
+            typeof pass.extractedUpdates === 'number' && Number.isFinite(pass.extractedUpdates)
+              ? pass.extractedUpdates
+              : 0,
+          noteCount: typeof pass.noteCount === 'number' && Number.isFinite(pass.noteCount) ? pass.noteCount : 0,
+          docCount: typeof pass.docCount === 'number' && Number.isFinite(pass.docCount) ? pass.docCount : 0,
+        };
+      })
+      .filter((entry): entry is PrefillDiagnostics['passes'][number] => entry !== null),
+  };
 }
 
 function getAiConfigPayload(config: ClientConfig): {
@@ -286,6 +346,7 @@ export async function processDocuments(
     gaps: Array.isArray(data.gaps) ? data.gaps : [],
     fieldUpdates: sanitizeFieldUpdates(data.fieldUpdates),
     prefillNotes,
+    prefillDiagnostics: sanitizePrefillDiagnostics(data.prefillDiagnostics),
   };
 }
 

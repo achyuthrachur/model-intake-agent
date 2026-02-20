@@ -136,7 +136,7 @@ function buildPrompt(
     '- Do not shift implementation text into back-testing sections, or governance text into design sections.',
     '- Narrative sections should be detailed and specific (typically 2-4 substantive paragraphs, ~120-260 words per section).',
     '- Explicitly reference concrete model/process details (methods, controls, cadence, data lineage, thresholds, ownership) when available.',
-    '- If using document evidence, cite source filename inline, e.g. "(Source: Vendor_Implementation_Production_Runbook.pdf)".',
+    '- If using document evidence, cite source filename inline, e.g. "(Source: Vendor_Implementation_Production_Runbook.docx)".',
     '- Avoid vague claims such as "controls are in place" unless supported by intake or document evidence.',
     '- If data is missing, use: [Information not provided - to be completed by model owner].',
     '- For section 1.4 produce a markdown assumptions table with columns: Assumption | Evidence | Operational Impact.',

@@ -24,8 +24,7 @@ export function ChatInput({ onSend, disabled, suggestedMessage }: ChatInputProps
   }, []);
 
   const handleSend = useCallback(() => {
-    const effectiveValue = value.length > 0 ? value : suggestedMessage ?? '';
-    const trimmed = effectiveValue.trim();
+    const trimmed = value.trim();
     if (!trimmed || disabled) return;
     onSend(trimmed);
     setValue('');
@@ -35,7 +34,15 @@ export function ChatInput({ onSend, disabled, suggestedMessage }: ChatInputProps
         textareaRef.current.style.height = 'auto';
       }
     });
-  }, [value, suggestedMessage, disabled, onSend]);
+  }, [value, disabled, onSend]);
+
+  const handleUseSuggestion = useCallback(() => {
+    if (!suggestedMessage || disabled) return;
+    setValue(suggestedMessage);
+    requestAnimationFrame(() => {
+      adjustHeight();
+    });
+  }, [suggestedMessage, disabled, adjustHeight]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -43,44 +50,60 @@ export function ChatInput({ onSend, disabled, suggestedMessage }: ChatInputProps
         e.preventDefault();
         handleSend();
       }
-    },
-    [handleSend],
+      },
+      [handleSend],
   );
 
-  const resolvedValue = value.length > 0 ? value : suggestedMessage ?? '';
-  const isSendDisabled = disabled || resolvedValue.trim().length === 0;
+  const isSendDisabled = disabled || value.trim().length === 0;
 
   useEffect(() => {
     requestAnimationFrame(() => {
       adjustHeight();
     });
-  }, [resolvedValue, adjustHeight]);
+  }, [value, adjustHeight]);
 
   return (
-    <div className="surface-muted flex items-end gap-2 border-t border-border/70 px-4 py-3">
-      <textarea
-        ref={textareaRef}
-        value={resolvedValue}
-        onChange={(e) => {
-          setValue(e.target.value);
-          adjustHeight();
-        }}
-        onKeyDown={handleKeyDown}
-        placeholder="Describe your model or answer the AI's questions..."
-        disabled={disabled}
-        rows={1}
-        className="flex-1 resize-none rounded-xl border border-input/80 bg-background/85 px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-[background-color,border-color,box-shadow] duration-200 ease-out focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35 focus-visible:shadow-[var(--ring-glow)] disabled:cursor-not-allowed disabled:opacity-50"
-        style={{ minHeight: '40px', maxHeight: '96px' }}
-      />
-      <Button
-        onClick={handleSend}
-        disabled={isSendDisabled}
-        size="icon"
-        className="h-10 w-10 shrink-0 bg-[var(--color-crowe-amber-core)] text-[var(--color-crowe-indigo-dark)] hover:bg-[var(--color-crowe-amber-bright)] disabled:opacity-40"
-        aria-label="Send message"
-      >
-        <Send className="h-4 w-4" />
-      </Button>
+    <div className="surface-muted border-t border-border/70 px-4 py-3">
+      {suggestedMessage && value.trim().length === 0 && (
+        <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-border/70 bg-background/80 px-3 py-1.5">
+          <p className="truncate text-[11px] text-muted-foreground">{suggestedMessage}</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleUseSuggestion}
+            disabled={disabled}
+            className="h-7 shrink-0 px-2 text-[11px]"
+          >
+            Use Suggestion
+          </Button>
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            adjustHeight();
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder="Describe your model or answer the AI's questions..."
+          disabled={disabled}
+          rows={1}
+          className="flex-1 resize-none rounded-xl border border-input/80 bg-background/85 px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] transition-[background-color,border-color,box-shadow] duration-200 ease-out focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35 focus-visible:shadow-[var(--ring-glow)] disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ minHeight: '40px', maxHeight: '96px' }}
+        />
+        <Button
+          onClick={handleSend}
+          disabled={isSendDisabled}
+          size="icon"
+          className="h-10 w-10 shrink-0 bg-[var(--color-crowe-amber-core)] text-[var(--color-crowe-indigo-dark)] hover:bg-[var(--color-crowe-amber-bright)] disabled:opacity-40"
+          aria-label="Send message"
+        >
+          <Send className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }

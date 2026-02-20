@@ -201,18 +201,21 @@ export function StepIntake() {
     store.messages.length > 0 && store.messages[store.messages.length - 1].role === 'system';
   const suggestedMessage =
     store.sessionMode === 'demo'
-      ? selectSuggestedDemoMessage(store.messages, demoAnswers)
+      ? selectSuggestedDemoMessage(store.messages, demoAnswers, store.formData)
       : undefined;
   const remainingDemoReplies = useMemo(
     () =>
       store.sessionMode === 'demo'
-        ? buildRemainingDemoAnswerBatch(store.messages, demoAnswers)
+        ? buildRemainingDemoAnswerBatch(store.messages, demoAnswers, store.formData)
         : [],
-    [store.sessionMode, store.messages, demoAnswers],
+    [store.sessionMode, store.messages, store.formData, demoAnswers],
   );
   const fullDemoReplies = useMemo(
-    () => (store.sessionMode === 'demo' ? buildRemainingDemoAnswerBatch([], demoAnswers) : []),
-    [store.sessionMode, demoAnswers],
+    () =>
+      store.sessionMode === 'demo'
+        ? buildRemainingDemoAnswerBatch([], demoAnswers, store.formData)
+        : [],
+    [store.sessionMode, store.formData, demoAnswers],
   );
   const batchCandidates = remainingDemoReplies.length > 0 ? remainingDemoReplies : fullDemoReplies;
 

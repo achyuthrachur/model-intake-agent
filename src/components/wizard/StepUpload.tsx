@@ -68,16 +68,23 @@ export function StepUpload() {
       setCoverageAnalysis({
         overallCoverage: result.overallCoverage,
         gaps: result.gaps,
+        prefillDiagnostics: result.prefillDiagnostics,
       });
 
       if (result.fieldUpdates.length > 0) {
         applyFieldUpdates(result.fieldUpdates);
 
         const remainingCount = useIntakeStore.getState().getUnfilledFields().length;
+        const scalarFilled = result.prefillDiagnostics.scalarFieldsFilled;
+        const tableRowsAdded = result.prefillDiagnostics.tableRowsAdded;
+        const prefillSummary =
+          tableRowsAdded > 0
+            ? `${scalarFilled} scalar fields and ${tableRowsAdded} table row${tableRowsAdded === 1 ? '' : 's'}`
+            : `${scalarFilled} scalar fields`;
         addMessage({
           id: `system-doc-prefill-${Date.now()}`,
           role: 'system',
-          content: `Document prefill applied ${result.fieldUpdates.length} field updates. ${remainingCount} fields remain for intake follow-up.`,
+          content: `Document prefill applied ${result.fieldUpdates.length} updates (${prefillSummary}). ${remainingCount} fields remain for intake follow-up.`,
           timestamp: Date.now(),
         });
       } else {

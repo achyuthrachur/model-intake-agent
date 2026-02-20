@@ -4,7 +4,15 @@ import pdf from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import { TEMPLATE_SECTIONS } from '@/data/template-structure';
 import { INTAKE_SCHEMA } from '@/lib/intake-schema';
-import type { AIModel, CoverageAnalysis, CoverageEntry, FieldUpdate, ParsedDocument } from '@/types';
+import type {
+  AIModel,
+  CoverageAnalysis,
+  CoverageEntry,
+  FieldUpdate,
+  ParsedDocument,
+  PrefillDiagnostics,
+  PrefillDiagnosticsPass,
+} from '@/types';
 
 export const runtime = 'nodejs';
 
@@ -34,14 +42,32 @@ interface ClassifiedDocument {
 interface FieldCatalogEntry {
   section: string;
   field: string;
+  label: string;
   type: 'text' | 'textarea' | 'select' | 'date' | 'multi-select' | 'table';
   options: string[];
   tableColumns: string[];
+  aiHint: string;
+}
+
+interface PrefillSourceDocument {
+  filename: string;
+  documentSummary: string;
+  excerpt: string;
+}
+
+interface PrefillExtractionPassResult {
+  rawFieldUpdates: unknown[];
+  notes: string[];
+}
+
+interface PrefillExtractionBatchResult extends PrefillExtractionPassResult {
+  passDiagnostics: PrefillDiagnosticsPass;
 }
 
 interface PrefillExtractionResult {
   fieldUpdates: FieldUpdate[];
   notes: string[];
+  diagnostics: PrefillDiagnostics;
 }
 
 const SECTION_KEY_TO_API_SECTION: Record<string, string> = {
@@ -64,15 +90,100 @@ const FIELD_CATALOG: FieldCatalogEntry[] = INTAKE_SCHEMA.flatMap((section) => {
   return section.fields.map((field) => ({
     section: sectionName,
     field: camelToSnake(field.name),
+    label: field.label,
     type: field.type,
     options: field.options ?? [],
     tableColumns: field.tableColumns?.map((column) => column.key) ?? [],
+    aiHint: field.aiHint ?? '',
   }));
 });
 
 const FIELD_CATALOG_INDEX: Map<string, FieldCatalogEntry> = new Map(
   FIELD_CATALOG.map((entry) => [`${entry.section}.${entry.field}`, entry] as const),
 );
+
+const PREFILL_SECTION_ORDER = INTAKE_SCHEMA.map(
+  (section) => SECTION_KEY_TO_API_SECTION[section.id] ?? section.id,
+);
+
+const PREFILL_SECTION_HINTS: Record<string, string[]> = {
+  model_summary: [
+    'overview',
+    'purpose',
+    'prepared by',
+    'document control',
+    'model owner',
+    'risk',
+    'validation',
+  ],
+  executive_summary: [
+    'business',
+    'regulatory',
+    'reporting',
+    'use',
+    'products',
+    'drivers',
+    'output',
+    'assumptions',
+    'limitations',
+  ],
+  model_design: [
+    'conceptual framework',
+    'architecture',
+    'segmentation',
+    'pd',
+    'lgd',
+    'ead',
+    'calibration',
+    'benchmarking',
+    'methodology',
+  ],
+  development_data: [
+    'data requirements',
+    'etl',
+    'source systems',
+    'data dictionary',
+    'mapping',
+    'quality controls',
+    'reconciliation',
+  ],
+  output_use: [
+    'back-testing',
+    'sensitivity',
+    'benchmarking',
+    'parallel run',
+    'monitoring',
+    'threshold',
+    'tuning',
+  ],
+  implementation: [
+    'implementation',
+    'production',
+    'runbook',
+    'system',
+    'testing',
+    'access controls',
+    'security',
+    'change management',
+    'operating procedures',
+  ],
+  performance: [
+    'adjustments',
+    'overlays',
+    'reporting metrics',
+    'reporting frequency',
+    'monitoring cadence',
+  ],
+  governance: [
+    'governance',
+    'roles',
+    'raci',
+    'contingency',
+    'business continuity',
+    'disaster recovery',
+    'references',
+  ],
+};
 
 function getOpenAIClient(): OpenAI {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -303,6 +414,182 @@ function sanitizeExtractedFieldUpdates(raw: unknown): FieldUpdate[] {
   return updates.slice(0, 120);
 }
 
+function createEmptyPrefillDiagnostics(): PrefillDiagnostics {
+  return {
+    requestedFields: FIELD_CATALOG.length,
+    extractedUpdates: 0,
+    scalarFieldsFilled: 0,
+    tableRowsAdded: 0,
+    passes: [],
+  };
+}
+
+function sanitizeRawFieldUpdateEntries(raw: unknown): unknown[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((entry) => entry && typeof entry === 'object');
+}
+
+function chunkArray<T>(items: T[], chunkSize: number): T[][] {
+  if (chunkSize <= 0) return [items];
+
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
+function scoreDocumentForSection(section: string, document: PrefillSourceDocument): number {
+  const hints = PREFILL_SECTION_HINTS[section] ?? [];
+  if (hints.length === 0) return 0;
+
+  const filename = document.filename.toLowerCase();
+  const haystack = `${filename}\n${document.documentSummary}\n${document.excerpt}`.toLowerCase();
+  let score = 0;
+
+  for (const hint of hints) {
+    const normalizedHint = hint.toLowerCase();
+    if (!haystack.includes(normalizedHint)) continue;
+    score += filename.includes(normalizedHint) ? 3 : 1;
+  }
+
+  return score;
+}
+
+function selectDocumentsForSection(
+  section: string,
+  documents: PrefillSourceDocument[],
+): PrefillSourceDocument[] {
+  if (documents.length <= 2) {
+    return documents;
+  }
+
+  const scored = documents.map((document) => ({
+    document,
+    score: scoreDocumentForSection(section, document),
+  }));
+
+  const highSignal = scored
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || b.document.excerpt.length - a.document.excerpt.length)
+    .map((entry) => entry.document);
+
+  if (highSignal.length >= 2) {
+    return highSignal.slice(0, Math.min(highSignal.length, 4));
+  }
+
+  return scored
+    .sort((a, b) => b.score - a.score || b.document.excerpt.length - a.document.excerpt.length)
+    .map((entry) => entry.document)
+    .slice(0, Math.min(documents.length, 3));
+}
+
+function selectRemainingCatalog(
+  catalog: FieldCatalogEntry[],
+  updates: FieldUpdate[],
+): FieldCatalogEntry[] {
+  const scalarKeys = new Set<string>();
+  const tableKeys = new Set<string>();
+
+  for (const update of updates) {
+    const key = `${update.section}.${update.field}`;
+    if (update.action === 'add_row') {
+      tableKeys.add(key);
+      continue;
+    }
+    scalarKeys.add(key);
+  }
+
+  return catalog.filter((entry) => {
+    const key = `${entry.section}.${entry.field}`;
+    return entry.type === 'table' ? !tableKeys.has(key) : !scalarKeys.has(key);
+  });
+}
+
+async function runPrefillExtractionPass(
+  client: OpenAI,
+  model: AIModel,
+  pass: string,
+  fieldCatalog: FieldCatalogEntry[],
+  documents: PrefillSourceDocument[],
+): Promise<PrefillExtractionBatchResult> {
+  const emptyPass: PrefillDiagnosticsPass = {
+    pass,
+    requestedFields: fieldCatalog.length,
+    extractedUpdates: 0,
+    noteCount: 0,
+    docCount: documents.length,
+  };
+
+  if (fieldCatalog.length === 0 || documents.length === 0) {
+    return {
+      rawFieldUpdates: [],
+      notes: [],
+      passDiagnostics: emptyPass,
+    };
+  }
+
+  const prompt = [
+    'You extract intake-form field updates from banking model documentation.',
+    `Current extraction pass: ${pass}`,
+    'Return strict JSON only with this shape:',
+    '{',
+    '  "fieldUpdates": [',
+    '    { "section": "model_summary", "field": "model_type", "action": "set", "value": "CECL/IFRS9" }',
+    '  ],',
+    '  "notes": ["string"]',
+    '}',
+    '',
+    'Rules:',
+    '- Use only explicit evidence from provided documents.',
+    '- Never fabricate values; skip uncertain fields.',
+    '- Use exact section and field names from FIELD CATALOG.',
+    '- For non-table fields, action must be "set".',
+    '- For table fields, action must be "add_row" with required table column keys.',
+    '- For select and multi-select fields, choose only listed options exactly.',
+    '- For date fields, output YYYY-MM-DD only when explicit in source.',
+    '- Avoid duplicate scalar updates in this pass.',
+    '- Keep notes concise and factual.',
+    '',
+    `FIELD CATALOG FOR THIS PASS (${fieldCatalog.length}):`,
+    JSON.stringify(fieldCatalog, null, 2),
+    '',
+    `DOCUMENTS FOR THIS PASS (${documents.length}):`,
+    JSON.stringify(documents, null, 2),
+  ].join('\n');
+
+  const completion = await client.chat.completions.create({
+    model,
+    temperature: 0,
+    max_tokens: 4200,
+    response_format: { type: 'json_object' },
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = completion.choices[0]?.message?.content || '{}';
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    parsed = {};
+  }
+
+  const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  const rawFieldUpdates = sanitizeRawFieldUpdateEntries(record.fieldUpdates);
+  const notes = sanitizeExtractionNotes(record.notes);
+  const extractedUpdates = sanitizeExtractedFieldUpdates(rawFieldUpdates).length;
+
+  return {
+    rawFieldUpdates,
+    notes,
+    passDiagnostics: {
+      ...emptyPass,
+      extractedUpdates,
+      noteCount: notes.length,
+    },
+  };
+}
+
 async function classifyDocument(
   client: OpenAI,
   model: AIModel,
@@ -389,67 +676,134 @@ async function extractPrefillFieldUpdates(
     .map((doc) => ({
       filename: doc.filename,
       documentSummary: doc.documentSummary,
-      excerpt: doc.extractedText.slice(0, 7000),
+      excerpt: doc.extractedText.slice(0, 8500),
     }))
     .filter((doc) => doc.excerpt.trim().length > 0);
 
   if (docsWithText.length === 0) {
-    return { fieldUpdates: [], notes: [] };
+    return {
+      fieldUpdates: [],
+      notes: [],
+      diagnostics: createEmptyPrefillDiagnostics(),
+    };
   }
 
-  const prompt = [
-    'You extract intake form values from banking model documentation.',
-    'Return strict JSON only in this shape:',
-    '{',
-    '  "fieldUpdates": [',
-    '    {',
-    '      "section": "model_summary",',
-    '      "field": "model_type",',
-    '      "action": "set",',
-    '      "value": "CECL/IFRS9"',
-    '    }',
-    '  ],',
-    '  "notes": ["string"]',
-    '}',
-    '',
-    'Rules:',
-    '- Use only explicit evidence from documents.',
-    '- Do not invent values. Skip uncertain fields.',
-    '- Use exact section and field names from FIELD CATALOG.',
-    '- For non-table fields use action "set".',
-    '- For table fields use action "add_row" and include value object with the required table column keys.',
-    '- For select/multi-select fields, use only listed options exactly.',
-    '- For date fields use YYYY-MM-DD only when explicit.',
-    '- Avoid duplicate updates for the same scalar field.',
-    '- Keep notes concise and factual.',
-    '',
-    'FIELD CATALOG:',
-    JSON.stringify(FIELD_CATALOG, null, 2),
-    '',
-    'DOCUMENTS:',
-    JSON.stringify(docsWithText, null, 2),
-  ].join('\n');
+  const notes: string[] = [];
+  const passDiagnostics: PrefillDiagnosticsPass[] = [];
+  const rawFieldUpdates: unknown[] = [];
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.1,
-    max_tokens: 5000,
-    response_format: { type: 'json_object' },
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const content = completion.choices[0]?.message?.content || '{}';
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    parsed = {};
+  const sectionCatalogMap = new Map<string, FieldCatalogEntry[]>();
+  for (const entry of FIELD_CATALOG) {
+    const current = sectionCatalogMap.get(entry.section) ?? [];
+    current.push(entry);
+    sectionCatalogMap.set(entry.section, current);
   }
 
-  const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  const orderedSections = [...new Set(PREFILL_SECTION_ORDER)];
+  for (const section of orderedSections) {
+    const catalog = sectionCatalogMap.get(section) ?? [];
+    if (catalog.length === 0) continue;
+
+    const docsForSection = selectDocumentsForSection(section, docsWithText);
+    const passName = `section_${section}`;
+    try {
+      const result = await runPrefillExtractionPass(client, model, passName, catalog, docsForSection);
+      rawFieldUpdates.push(...result.rawFieldUpdates);
+      notes.push(...result.notes.map((note) => `[${passName}] ${note}`));
+      passDiagnostics.push(result.passDiagnostics);
+    } catch (error) {
+      console.error(`process-docs: prefill section pass failed (${passName})`, error);
+      notes.push(`[${passName}] extraction failed.`);
+      passDiagnostics.push({
+        pass: passName,
+        requestedFields: catalog.length,
+        extractedUpdates: 0,
+        noteCount: 1,
+        docCount: docsForSection.length,
+      });
+    }
+  }
+
+  let consolidatedUpdates = sanitizeExtractedFieldUpdates(rawFieldUpdates);
+
+  const scalarCatalog = FIELD_CATALOG.filter((entry) => entry.type !== 'table');
+  const remainingScalarCatalog = selectRemainingCatalog(scalarCatalog, consolidatedUpdates);
+  const scalarBatches = chunkArray(remainingScalarCatalog, 40).slice(0, 2);
+  for (let index = 0; index < scalarBatches.length; index += 1) {
+    const batch = scalarBatches[index];
+    const passName = `remaining_scalar_${index + 1}`;
+    try {
+      const result = await runPrefillExtractionPass(client, model, passName, batch, docsWithText);
+      rawFieldUpdates.push(...result.rawFieldUpdates);
+      notes.push(...result.notes.map((note) => `[${passName}] ${note}`));
+      passDiagnostics.push(result.passDiagnostics);
+      consolidatedUpdates = sanitizeExtractedFieldUpdates(rawFieldUpdates);
+    } catch (error) {
+      console.error(`process-docs: prefill remaining scalar pass failed (${passName})`, error);
+      notes.push(`[${passName}] extraction failed.`);
+      passDiagnostics.push({
+        pass: passName,
+        requestedFields: batch.length,
+        extractedUpdates: 0,
+        noteCount: 1,
+        docCount: docsWithText.length,
+      });
+    }
+  }
+
+  const tableCatalog = FIELD_CATALOG.filter((entry) => entry.type === 'table');
+  const remainingTableCatalog = selectRemainingCatalog(tableCatalog, consolidatedUpdates);
+  if (remainingTableCatalog.length > 0) {
+    const passName = 'remaining_tables';
+    try {
+      const result = await runPrefillExtractionPass(
+        client,
+        model,
+        passName,
+        remainingTableCatalog,
+        docsWithText,
+      );
+      rawFieldUpdates.push(...result.rawFieldUpdates);
+      notes.push(...result.notes.map((note) => `[${passName}] ${note}`));
+      passDiagnostics.push(result.passDiagnostics);
+    } catch (error) {
+      console.error(`process-docs: prefill table pass failed (${passName})`, error);
+      notes.push(`[${passName}] extraction failed.`);
+      passDiagnostics.push({
+        pass: passName,
+        requestedFields: remainingTableCatalog.length,
+        extractedUpdates: 0,
+        noteCount: 1,
+        docCount: docsWithText.length,
+      });
+    }
+  }
+
+  const finalUpdates = sanitizeExtractedFieldUpdates(rawFieldUpdates);
+  const scalarFieldsFilled = new Set(
+    finalUpdates
+      .filter((update) => update.action !== 'add_row')
+      .map((update) => `${update.section}.${update.field}`),
+  ).size;
+  const tableRowsAdded = finalUpdates.filter((update) => update.action === 'add_row').length;
+
+  const diagnostics: PrefillDiagnostics = {
+    requestedFields: FIELD_CATALOG.length,
+    extractedUpdates: finalUpdates.length,
+    scalarFieldsFilled,
+    tableRowsAdded,
+    passes: passDiagnostics,
+  };
+
+  const summaryNotes = [
+    `Prefill extraction scanned ${docsWithText.length} document(s) using ${passDiagnostics.length} pass(es).`,
+    `Captured ${scalarFieldsFilled} scalar field(s) and ${tableRowsAdded} table row(s).`,
+  ];
+
   return {
-    fieldUpdates: sanitizeExtractedFieldUpdates(record.fieldUpdates),
-    notes: sanitizeExtractionNotes(record.notes),
+    fieldUpdates: finalUpdates,
+    notes: [...summaryNotes, ...notes.slice(0, 24)],
+    diagnostics,
   };
 }
 
@@ -542,10 +896,12 @@ export async function POST(request: NextRequest) {
 
     let fieldUpdates: FieldUpdate[] = [];
     let prefillNotes: string[] = [];
+    let prefillDiagnostics: PrefillDiagnostics = createEmptyPrefillDiagnostics();
     try {
       const extracted = await extractPrefillFieldUpdates(client, model, parsedDocuments);
       fieldUpdates = extracted.fieldUpdates;
       prefillNotes = extracted.notes;
+      prefillDiagnostics = extracted.diagnostics;
     } catch (error) {
       console.error('process-docs: failed to extract prefill field updates', error);
     }
@@ -556,6 +912,7 @@ export async function POST(request: NextRequest) {
       gaps,
       fieldUpdates,
       prefillNotes,
+      prefillDiagnostics,
     });
   } catch (error) {
     console.error('process-docs route error:', error);

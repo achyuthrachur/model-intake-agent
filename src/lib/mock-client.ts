@@ -5,6 +5,7 @@ import type {
   ParsedDocument,
   CoverageAnalysis,
   GeneratedReport,
+  PrefillDiagnostics,
 } from '@/types';
 
 // ============================================================
@@ -203,6 +204,7 @@ export async function mockProcessDocuments(
   gaps: string[];
   fieldUpdates: FieldUpdate[];
   prefillNotes: string[];
+  prefillDiagnostics: PrefillDiagnostics;
 }> {
   await delay(2500);
 
@@ -337,6 +339,21 @@ export async function mockProcessDocuments(
     gaps,
     fieldUpdates,
     prefillNotes: ['Mock prefill applied from uploaded document set.'],
+    prefillDiagnostics: {
+      requestedFields: 89,
+      extractedUpdates: fieldUpdates.length,
+      scalarFieldsFilled: fieldUpdates.filter((update) => update.action !== 'add_row').length,
+      tableRowsAdded: fieldUpdates.filter((update) => update.action === 'add_row').length,
+      passes: [
+        {
+          pass: 'mock_pass',
+          requestedFields: 89,
+          extractedUpdates: fieldUpdates.length,
+          noteCount: 1,
+          docCount: documents.length,
+        },
+      ],
+    },
   };
 }
 

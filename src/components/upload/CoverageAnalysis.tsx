@@ -45,6 +45,7 @@ function StatusBadge({ status }: { status: 'covered' | 'partial' | 'gap' }) {
 
 export function CoverageAnalysisGrid({ coverage }: CoverageAnalysisGridProps) {
   const gapCount = coverage.gaps.length;
+  const prefill = coverage.prefillDiagnostics;
 
   return (
     <div className="flex flex-col gap-4">
@@ -68,6 +69,19 @@ export function CoverageAnalysisGrid({ coverage }: CoverageAnalysisGridProps) {
           </span>
         </div>
       </div>
+
+      {prefill && (
+        <div className="rounded-xl border border-[var(--color-crowe-indigo-bright)]/25 bg-[var(--color-crowe-indigo-bright)]/8 px-4 py-3">
+          <p className="text-sm font-medium text-foreground">
+            Prefill Summary: {prefill.scalarFieldsFilled} scalar fields and {prefill.tableRowsAdded}{' '}
+            table row{prefill.tableRowsAdded === 1 ? '' : 's'} captured
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Extraction ran {prefill.passes.length} pass{prefill.passes.length === 1 ? '' : 'es'} across uploaded
+            documents.
+          </p>
+        </div>
+      )}
 
       {/* Grid */}
       <div className="overflow-hidden rounded-xl border border-border/75">

@@ -4,6 +4,7 @@ import {
   type DemoAnswerEntry,
 } from '@/lib/demo-answers';
 import type { ChatMessage } from '@/types';
+import { useIntakeStore } from '@/stores/intake-store';
 
 function msg(
   role: ChatMessage['role'],
@@ -45,6 +46,12 @@ const ANSWERS: DemoAnswerEntry[] = [
     text: 'Fallback answer two',
   },
 ];
+
+function getFreshFormState() {
+  const state = useIntakeStore.getState();
+  state.resetSession();
+  return structuredClone(useIntakeStore.getState().formData);
+}
 
 describe('demo answer selector', () => {
   it('matches question intent for model type', () => {
@@ -111,6 +118,31 @@ describe('demo answer selector', () => {
       'Fallback answer one',
       'Fallback answer two',
     ]);
+  });
+
+  it('prefers prefilled form values for suggested message when available', () => {
+    const formState = getFreshFormState();
+    formState.modelSummary.modelType = 'CECL/IFRS9';
+
+    const messages: ChatMessage[] = [
+      msg('assistant', 'Can you tell me the name and type of the model?', 'a1'),
+    ];
+
+    const suggested = selectSuggestedDemoMessage(messages, ANSWERS, formState);
+    expect(suggested).toBe('Model Type: CECL/IFRS9');
+  });
+
+  it('targets missing-field intents in batch mode when form state is provided', () => {
+    const formState = getFreshFormState();
+    formState.modelSummary.modelType = 'CECL/IFRS9';
+    formState.modelSummary.estimationTechnique = 'Cash Flow Analysis';
+    formState.modelSummary.modelDeveloper = 'Northstar Analytics';
+    formState.modelSummary.modelOwner = 'Finance';
+    formState.modelSummary.policyCoverage = '';
+
+    const batch = buildRemainingDemoAnswerBatch([], ANSWERS, formState);
+    expect(batch).toContain('Regulatory answer');
+    expect(batch).toContain('Fallback answer one');
   });
 
   it('deduplicates duplicate answer text in batch mode', () => {
