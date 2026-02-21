@@ -470,12 +470,13 @@ function scoreFieldMatcher(
   return score;
 }
 
-function buildQuestionCalibratedPrefillSuggestion(
-  question: string,
-  formState?: IntakeFormState,
-): string | undefined {
-  if (!formState) return undefined;
+interface QuestionFieldScore {
+  path: string;
+  label: string;
+  score: number;
+}
 
+function getQuestionFieldMatches(question: string): QuestionFieldScore[] {
   const questionSentences = extractQuestionSentences(question);
   const candidates =
     questionSentences.length > 0
@@ -488,36 +489,48 @@ function buildQuestionCalibratedPrefillSuggestion(
 
     const questionTokens = tokenizeSuggestion(candidate);
     const scored = SUGGESTION_FIELD_MATCHERS.map((matcher) => ({
-      matcher,
+      path: matcher.path,
+      label: matcher.label,
       score: scoreFieldMatcher(normalizedQuestion, questionTokens, matcher),
     })).sort((a, b) => b.score - a.score);
 
     const topScore = scored[0]?.score ?? 0;
-    if (topScore < 3) continue;
+    if (topScore < 2) continue;
 
     const asksMultiple = /\band\b|also|as well/i.test(candidate);
-    const threshold = asksMultiple ? Math.max(2, topScore - 2) : Math.max(3, topScore - 1);
-    const maxFields = asksMultiple ? 3 : 1;
-    const lines: string[] = [];
-
-    for (const entry of scored) {
-      if (entry.score < threshold) continue;
-      if (lines.length >= maxFields) break;
-
-      const value = getValueAtPath(formState, entry.matcher.path);
-      const formatted = formatValueForSuggestion(value);
-      if (!formatted) continue;
-
-      lines.push(`${entry.matcher.label}: ${formatted}`);
-    }
-
-    if (lines.length > 0) {
-      const summary = lines.join(' ');
-      return summary.length > 520 ? `${summary.slice(0, 517)}...` : summary;
-    }
+    const threshold = asksMultiple ? Math.max(1, topScore - 2) : Math.max(2, topScore - 1);
+    return scored.filter((entry) => entry.score >= threshold);
   }
 
-  return undefined;
+  return [];
+}
+
+function buildQuestionCalibratedPrefillSuggestion(
+  question: string,
+  formState?: IntakeFormState,
+): string | undefined {
+  if (!formState) return undefined;
+
+  const scoredFields = getQuestionFieldMatches(question);
+  if (scoredFields.length === 0) return undefined;
+
+  const asksMultiple = /\band\b|also|as well/i.test(question);
+  const maxFields = asksMultiple ? 3 : 1;
+  const lines: string[] = [];
+
+  for (const entry of scoredFields) {
+    if (lines.length >= maxFields) break;
+
+    const value = getValueAtPath(formState, entry.path);
+    const formatted = formatValueForSuggestion(value);
+    if (!formatted) continue;
+
+    lines.push(`${entry.label}: ${formatted}`);
+  }
+
+  if (lines.length === 0) return undefined;
+  const summary = lines.join(' ');
+  return summary.length > 520 ? `${summary.slice(0, 517)}...` : summary;
 }
 
 function buildPrefilledSuggestion(
@@ -616,6 +629,29 @@ function selectEntryForQuestion(
   return selected;
 }
 
+function selectEntryForMatchedFields(
+  question: string,
+  answers: DemoAnswerEntry[],
+): DemoAnswerEntry | undefined {
+  const matches = getQuestionFieldMatches(question);
+  if (matches.length === 0) return undefined;
+
+  const intentsFromMatches = new Set<DemoAnswerIntent>();
+  for (const match of matches) {
+    const mappedIntents = FIELD_PATH_TO_INTENTS.get(match.path) ?? [];
+    for (const intent of mappedIntents) {
+      intentsFromMatches.add(intent);
+    }
+  }
+
+  for (const intent of intentsFromMatches) {
+    const matched = answers.find((entry) => entry.intents.includes(intent));
+    if (matched) return matched;
+  }
+
+  return undefined;
+}
+
 export function selectSuggestedDemoMessage(
   messages: ChatMessage[],
   answers: DemoAnswerEntry[],
@@ -649,6 +685,11 @@ export function selectSuggestedDemoMessage(
   const prefilledSuggestion = buildPrefilledSuggestion(latestIntents, formState);
   if (prefilledSuggestion) {
     return prefilledSuggestion;
+  }
+
+  const fieldMatched = selectEntryForMatchedFields(latestAssistantQuestion, answers);
+  if (fieldMatched) {
+    return fieldMatched.text;
   }
 
   const selected = selectEntryForQuestion(latestAssistantQuestion, answers, state);

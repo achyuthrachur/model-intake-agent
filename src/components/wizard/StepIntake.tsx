@@ -19,6 +19,9 @@ import { RefreshCw } from 'lucide-react';
 import type { ChatMessage, IntakeFormState } from '@/types';
 
 const CHAT_REQUEST_TIMEOUT_MS = 45000;
+const MAX_BATCH_TURNS = 120;
+const MAX_BATCH_NO_PROGRESS = 8;
+const RECENT_BATCH_REPLY_MEMORY = 12;
 
 const FIELD_PROMPT_BY_PATH = new Map<string, string>(
   INTAKE_SCHEMA.flatMap((section) =>
@@ -64,6 +67,10 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
         reject(error);
       });
   });
+}
+
+function normalizeBatchReply(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 export function StepIntake() {
@@ -210,14 +217,6 @@ export function StepIntake() {
         : [],
     [store.sessionMode, store.messages, store.formData, demoAnswers],
   );
-  const fullDemoReplies = useMemo(
-    () =>
-      store.sessionMode === 'demo'
-        ? buildRemainingDemoAnswerBatch([], demoAnswers, store.formData)
-        : [],
-    [store.sessionMode, store.formData, demoAnswers],
-  );
-  const batchCandidates = remainingDemoReplies.length > 0 ? remainingDemoReplies : fullDemoReplies;
 
   const handleRetry = () => {
     if (isBatchFilling) return;
@@ -229,33 +228,97 @@ export function StepIntake() {
   const handleBatchFillRemaining = useCallback(async () => {
     if (store.sessionMode !== 'demo') return;
     if (store.isStreaming || isBatchFilling) return;
-    if (batchCandidates.length === 0) return;
+    if (demoAnswers.length === 0) return;
 
     setIsBatchFilling(true);
-    setBatchProgress({ completed: 0, total: batchCandidates.length });
+    setBatchProgress({ completed: 0, total: MAX_BATCH_TURNS });
     let failures = 0;
+    let turns = 0;
+    let noProgressTurns = 0;
+    let previousUnfilled = getUnfilledFields(useIntakeStore.getState().formData).length;
+    const recentReplies: string[] = [];
 
     try {
-      for (let idx = 0; idx < batchCandidates.length; idx += 1) {
-        if (useIntakeStore.getState().sessionMode !== 'demo') {
+      while (turns < MAX_BATCH_TURNS) {
+        const liveState = useIntakeStore.getState();
+        if (liveState.sessionMode !== 'demo') break;
+
+        const unfilledCount = getUnfilledFields(liveState.formData).length;
+        if (unfilledCount === 0) break;
+
+        const recentReplySet = new Set(recentReplies);
+        let candidate =
+          selectSuggestedDemoMessage(liveState.messages, demoAnswers, liveState.formData)?.trim() ?? '';
+
+        if (!candidate || recentReplySet.has(normalizeBatchReply(candidate))) {
+          const fallbackBatch = buildRemainingDemoAnswerBatch(
+            liveState.messages,
+            demoAnswers,
+            liveState.formData,
+          );
+          const fallback = fallbackBatch.find(
+            (entry) => !recentReplySet.has(normalizeBatchReply(entry)),
+          );
+          candidate = fallback?.trim() ?? '';
+        }
+
+        if (!candidate) {
           break;
         }
 
-        const success = await sendIntakeReply(batchCandidates[idx], {
+        const success = await sendIntakeReply(candidate, {
           deferRecentUpdateClear: true,
         });
-        setBatchProgress({ completed: idx + 1, total: batchCandidates.length });
+        turns += 1;
+        setBatchProgress({ completed: turns, total: MAX_BATCH_TURNS });
+
+        const normalizedCandidate = normalizeBatchReply(candidate);
+        if (normalizedCandidate) {
+          recentReplies.push(normalizedCandidate);
+          if (recentReplies.length > RECENT_BATCH_REPLY_MEMORY) {
+            recentReplies.shift();
+          }
+        }
 
         if (!success) {
           failures += 1;
+          noProgressTurns += 1;
+        } else {
+          const nextUnfilled = getUnfilledFields(useIntakeStore.getState().formData).length;
+          if (nextUnfilled < previousUnfilled) {
+            noProgressTurns = 0;
+          } else {
+            noProgressTurns += 1;
+          }
+          previousUnfilled = nextUnfilled;
+        }
+
+        if (noProgressTurns >= MAX_BATCH_NO_PROGRESS) {
+          store.addMessage({
+            id: `system-batch-stalled-${Date.now()}`,
+            role: 'system',
+            content:
+              'Batch fill paused because recent turns were not reducing remaining fields. You can continue manually from this point.',
+            timestamp: Date.now(),
+          });
+          break;
         }
       }
     } finally {
+      const remainingCount = getUnfilledFields(useIntakeStore.getState().formData).length;
+
       if (failures > 0) {
         store.addMessage({
           id: `system-batch-fill-${Date.now()}`,
           role: 'system',
           content: `Batch fill completed with ${failures} failed request(s). You can click the batch button again to continue.`,
+          timestamp: Date.now(),
+        });
+      } else if (remainingCount === 0) {
+        store.addMessage({
+          id: `system-batch-fill-done-${Date.now()}`,
+          role: 'system',
+          content: 'Batch fill completed all remaining intake fields.',
           timestamp: Date.now(),
         });
       }
@@ -269,7 +332,7 @@ export function StepIntake() {
     store.sessionMode,
     store.isStreaming,
     isBatchFilling,
-    batchCandidates,
+    demoAnswers,
     sendIntakeReply,
   ]);
 
@@ -301,14 +364,14 @@ export function StepIntake() {
           <div className="flex items-center justify-between gap-3 border-t border-border/70 bg-muted/35 px-4 py-2">
             <p className="text-[11px] text-muted-foreground">
               {isBatchFilling && batchProgress
-                ? `Batch filling demo answers (${batchProgress.completed}/${batchProgress.total})`
+                ? `Batch filling demo answers (turn ${batchProgress.completed})`
                 : 'Demo shortcut: use suggested replies or batch-fill all remaining answers.'}
             </p>
             <Button
               variant="outline"
               size="sm"
               onClick={handleBatchFillRemaining}
-              disabled={store.isStreaming || isBatchFilling || batchCandidates.length === 0}
+              disabled={store.isStreaming || isBatchFilling || demoAnswers.length === 0}
             >
               {isBatchFilling
                 ? 'Batch Filling...'

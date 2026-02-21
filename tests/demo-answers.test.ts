@@ -163,6 +163,27 @@ describe('demo answer selector', () => {
     expect(suggested).toContain('Model Owner: Finance Controllership');
   });
 
+  it('uses schema field matching when wording does not hit intent regex directly', () => {
+    const customAnswers: DemoAnswerEntry[] = [
+      {
+        id: 'estimation',
+        intents: ['estimation_technique'],
+        text: 'Estimation technique answer',
+      },
+      {
+        id: 'fallback',
+        intents: ['fallback'],
+        text: 'Fallback answer',
+      },
+    ];
+    const messages: ChatMessage[] = [
+      msg('assistant', 'What primary modeling method does this use?', 'a1'),
+    ];
+
+    const suggested = selectSuggestedDemoMessage(messages, customAnswers);
+    expect(suggested).toBe('Estimation technique answer');
+  });
+
   it('targets missing-field intents in batch mode when form state is provided', () => {
     const formState = getFreshFormState();
     formState.modelSummary.modelType = 'CECL/IFRS9';
