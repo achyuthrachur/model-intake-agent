@@ -132,6 +132,37 @@ describe('demo answer selector', () => {
     expect(suggested).toBe('Model Type: CECL/IFRS9');
   });
 
+  it('matches prefilled suggestion to the specific field asked in the question', () => {
+    const formState = getFreshFormState();
+    formState.modelSummary.modelType = 'CECL/IFRS9';
+    formState.modelSummary.estimationTechnique = 'Hybrid';
+
+    const messages: ChatMessage[] = [
+      msg(
+        'assistant',
+        'Thank you for the model type. Next, could you specify the estimation technique used in this model?',
+        'a1',
+      ),
+    ];
+
+    const suggested = selectSuggestedDemoMessage(messages, ANSWERS, formState);
+    expect(suggested).toBe('Estimation Technique: Hybrid');
+  });
+
+  it('returns multiple calibrated fields when the question asks for both', () => {
+    const formState = getFreshFormState();
+    formState.modelSummary.modelDeveloper = 'Northstar Analytics';
+    formState.modelSummary.modelOwner = 'Finance Controllership';
+
+    const messages: ChatMessage[] = [
+      msg('assistant', 'Who is the model developer and model owner?', 'a1'),
+    ];
+
+    const suggested = selectSuggestedDemoMessage(messages, ANSWERS, formState);
+    expect(suggested).toContain('Model Developer: Northstar Analytics');
+    expect(suggested).toContain('Model Owner: Finance Controllership');
+  });
+
   it('targets missing-field intents in batch mode when form state is provided', () => {
     const formState = getFreshFormState();
     formState.modelSummary.modelType = 'CECL/IFRS9';

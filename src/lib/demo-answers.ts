@@ -1,4 +1,5 @@
 import type { ChatMessage, IntakeFormState } from '@/types';
+import { INTAKE_SCHEMA } from '@/lib/intake-schema';
 
 export type DemoAnswerIntent =
   | 'model_type'
@@ -199,6 +200,91 @@ for (const [intent, paths] of Object.entries(INTENT_FIELD_PATHS) as Array<
   }
 }
 
+function camelToWords(value: string): string {
+  return value.replace(/([A-Z])/g, ' $1').trim();
+}
+
+function normalizeSuggestionText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const SUGGESTION_STOP_WORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'that',
+  'this',
+  'from',
+  'into',
+  'your',
+  'you',
+  'are',
+  'have',
+  'what',
+  'when',
+  'where',
+  'which',
+  'will',
+  'would',
+  'could',
+  'should',
+  'about',
+  'used',
+  'use',
+  'please',
+  'next',
+  'provide',
+  'share',
+  'tell',
+  'more',
+  'details',
+]);
+
+function tokenizeSuggestion(value: string): string[] {
+  const normalized = normalizeSuggestionText(value);
+  if (!normalized) return [];
+
+  return normalized
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !SUGGESTION_STOP_WORDS.has(token));
+}
+
+interface SuggestionFieldMatcher {
+  path: string;
+  label: string;
+  labelNormalized: string;
+  keywords: Set<string>;
+  optionHints: string[];
+}
+
+const SUGGESTION_FIELD_MATCHERS: SuggestionFieldMatcher[] = INTAKE_SCHEMA.flatMap((section) =>
+  section.fields.map((field) => {
+    const path = `${section.id}.${field.name}`;
+    const optionHints = (field.options ?? []).map((option) => normalizeSuggestionText(option));
+    const metadata = [
+      section.title,
+      field.label,
+      field.aiHint ?? '',
+      camelToWords(field.name),
+      ...(field.options ?? []),
+    ].join(' ');
+
+    return {
+      path,
+      label: field.label,
+      labelNormalized: normalizeSuggestionText(field.label),
+      keywords: new Set(tokenizeSuggestion(metadata)),
+      optionHints,
+    };
+  }),
+);
+
+const FIELD_LABEL_BY_PATH = new Map(
+  SUGGESTION_FIELD_MATCHERS.map((matcher) => [matcher.path, matcher.label]),
+);
+
 let demoAnswersCache: DemoAnswerEntry[] | null = null;
 
 function sanitizeIntent(value: unknown): DemoAnswerIntent | null {
@@ -347,8 +433,91 @@ function formatValueForSuggestion(value: unknown): string | null {
 }
 
 function humanizeFieldPath(path: string): string {
+  const fromSchema = FIELD_LABEL_BY_PATH.get(path);
+  if (fromSchema) return fromSchema;
   const field = path.split('.').slice(-1)[0] ?? path;
   return field.replace(/([A-Z])/g, ' $1').replace(/^./, (ch) => ch.toUpperCase());
+}
+
+function scoreFieldMatcher(
+  questionNormalized: string,
+  questionTokens: string[],
+  matcher: SuggestionFieldMatcher,
+): number {
+  if (!questionNormalized) return 0;
+
+  let score = 0;
+  if (matcher.labelNormalized && questionNormalized.includes(matcher.labelNormalized)) {
+    score += 10;
+  }
+
+  for (const token of questionTokens) {
+    if (!matcher.keywords.has(token)) continue;
+    score += token.length >= 7 ? 2 : 1;
+  }
+
+  for (const optionHint of matcher.optionHints) {
+    if (!optionHint) continue;
+    if (questionNormalized.includes(optionHint)) {
+      score += 2;
+    }
+  }
+
+  if (questionNormalized.includes('who') && /(owner|developer|validator)/.test(matcher.labelNormalized)) {
+    score += 2;
+  }
+
+  return score;
+}
+
+function buildQuestionCalibratedPrefillSuggestion(
+  question: string,
+  formState?: IntakeFormState,
+): string | undefined {
+  if (!formState) return undefined;
+
+  const questionSentences = extractQuestionSentences(question);
+  const candidates =
+    questionSentences.length > 0
+      ? [...questionSentences].reverse()
+      : [question.trim()].filter((entry) => entry.length > 0);
+
+  for (const candidate of candidates) {
+    const normalizedQuestion = normalizeSuggestionText(candidate);
+    if (!normalizedQuestion) continue;
+
+    const questionTokens = tokenizeSuggestion(candidate);
+    const scored = SUGGESTION_FIELD_MATCHERS.map((matcher) => ({
+      matcher,
+      score: scoreFieldMatcher(normalizedQuestion, questionTokens, matcher),
+    })).sort((a, b) => b.score - a.score);
+
+    const topScore = scored[0]?.score ?? 0;
+    if (topScore < 3) continue;
+
+    const asksMultiple = /\band\b|also|as well/i.test(candidate);
+    const threshold = asksMultiple ? Math.max(2, topScore - 2) : Math.max(3, topScore - 1);
+    const maxFields = asksMultiple ? 3 : 1;
+    const lines: string[] = [];
+
+    for (const entry of scored) {
+      if (entry.score < threshold) continue;
+      if (lines.length >= maxFields) break;
+
+      const value = getValueAtPath(formState, entry.matcher.path);
+      const formatted = formatValueForSuggestion(value);
+      if (!formatted) continue;
+
+      lines.push(`${entry.matcher.label}: ${formatted}`);
+    }
+
+    if (lines.length > 0) {
+      const summary = lines.join(' ');
+      return summary.length > 520 ? `${summary.slice(0, 517)}...` : summary;
+    }
+  }
+
+  return undefined;
 }
 
 function buildPrefilledSuggestion(
@@ -466,6 +635,14 @@ export function selectSuggestedDemoMessage(
     if (message.role === 'user') {
       void selectEntryForQuestion(latestAssistantQuestion, answers, state);
     }
+  }
+
+  const questionCalibratedSuggestion = buildQuestionCalibratedPrefillSuggestion(
+    latestAssistantQuestion,
+    formState,
+  );
+  if (questionCalibratedSuggestion) {
+    return questionCalibratedSuggestion;
   }
 
   const latestIntents = inferIntents(latestAssistantQuestion);
