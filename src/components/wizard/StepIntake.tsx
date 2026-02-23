@@ -9,6 +9,7 @@ import {
   selectSuggestedDemoMessage,
   type DemoAnswerEntry,
 } from '@/lib/demo-answers';
+import { buildCeclDemoAutofillUpdates } from '@/lib/demo-cecl-autofill';
 import { INTAKE_SCHEMA } from '@/lib/intake-schema';
 import { useAnimeStagger } from '@/lib/anime-motion';
 import { ChatWindow } from '@/components/chat/ChatWindow';
@@ -239,6 +240,30 @@ export function StepIntake() {
     const recentReplies: string[] = [];
 
     try {
+      const deterministicUpdates = buildCeclDemoAutofillUpdates(useIntakeStore.getState().formData);
+      if (deterministicUpdates.length > 0) {
+        const beforeDeterministic = previousUnfilled;
+        store.applyFieldUpdates(deterministicUpdates);
+
+        turns += deterministicUpdates.length;
+        setBatchProgress({ completed: turns, total: MAX_BATCH_TURNS });
+
+        const afterDeterministic = getUnfilledFields(useIntakeStore.getState().formData).length;
+        previousUnfilled = afterDeterministic;
+        noProgressTurns = afterDeterministic < beforeDeterministic ? 0 : noProgressTurns;
+
+        store.addMessage({
+          id: `system-batch-fill-defaults-${Date.now()}`,
+          role: 'system',
+          content: `Applied ${deterministicUpdates.length} CECL demo defaults for unresolved intake fields.`,
+          timestamp: Date.now(),
+        });
+      }
+
+      if (previousUnfilled === 0) {
+        return;
+      }
+
       while (turns < MAX_BATCH_TURNS) {
         const liveState = useIntakeStore.getState();
         if (liveState.sessionMode !== 'demo') break;

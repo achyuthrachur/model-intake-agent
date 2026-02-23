@@ -1,5 +1,9 @@
 import type { ChatMessage, IntakeFormState } from '@/types';
 import { INTAKE_SCHEMA } from '@/lib/intake-schema';
+import {
+  getCeclDemoAutofillResponseForFieldPath,
+  getCeclDemoAutofillResponsesForUnfilledFields,
+} from '@/lib/demo-cecl-autofill';
 
 export type DemoAnswerIntent =
   | 'model_type'
@@ -533,6 +537,27 @@ function buildQuestionCalibratedPrefillSuggestion(
   return summary.length > 520 ? `${summary.slice(0, 517)}...` : summary;
 }
 
+function buildQuestionCalibratedDemoFallbackSuggestion(
+  question: string,
+  formState?: IntakeFormState,
+): string | undefined {
+  if (!formState) return undefined;
+
+  const scoredFields = getQuestionFieldMatches(question);
+  if (scoredFields.length === 0) return undefined;
+
+  for (const entry of scoredFields) {
+    const existingValue = getValueAtPath(formState, entry.path);
+    const formattedExisting = formatValueForSuggestion(existingValue);
+    if (formattedExisting) continue;
+
+    const response = getCeclDemoAutofillResponseForFieldPath(entry.path);
+    if (response) return response;
+  }
+
+  return undefined;
+}
+
 function buildPrefilledSuggestion(
   intents: DemoAnswerIntent[],
   formState?: IntakeFormState,
@@ -681,6 +706,14 @@ export function selectSuggestedDemoMessage(
     return questionCalibratedSuggestion;
   }
 
+  const questionCalibratedDemoFallback = buildQuestionCalibratedDemoFallbackSuggestion(
+    latestAssistantQuestion,
+    formState,
+  );
+  if (questionCalibratedDemoFallback) {
+    return questionCalibratedDemoFallback;
+  }
+
   const latestIntents = inferIntents(latestAssistantQuestion);
   const prefilledSuggestion = buildPrefilledSuggestion(latestIntents, formState);
   if (prefilledSuggestion) {
@@ -723,6 +756,17 @@ export function buildRemainingDemoAnswerBatch(
 
   const batch: string[] = [];
   const seen = new Set<string>();
+
+  if (formState) {
+    for (const response of getCeclDemoAutofillResponsesForUnfilledFields(formState)) {
+      const normalized = normalizeAnswerText(response);
+      if (!normalized || seen.has(normalized)) continue;
+      if (usedUserReplies.has(normalized)) continue;
+
+      seen.add(normalized);
+      batch.push(response.trim());
+    }
+  }
 
   for (const entry of orderedAnswers) {
     const normalized = normalizeAnswerText(entry.text);

@@ -424,6 +424,117 @@ function createEmptyPrefillDiagnostics(): PrefillDiagnostics {
   };
 }
 
+function hasScalarFieldUpdate(updates: FieldUpdate[], section: string, field: string): boolean {
+  return updates.some(
+    (update) => update.section === section && update.field === field && update.action !== 'add_row',
+  );
+}
+
+function detectHeuristicModelDeveloper(documents: ParsedDocument[]): string | null {
+  for (const document of documents) {
+    const match = document.extractedText.match(/Prepared by:\s*([^\n\r]+)/i);
+    if (!match) continue;
+
+    const raw = match[1]
+      .split(/Primary contacts?:|Prepared for:|Document Control/i)[0]
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!raw) continue;
+
+    if (/northstar analytics/i.test(raw)) {
+      return 'Northstar Analytics';
+    }
+
+    return raw.length > 120 ? raw.slice(0, 117).trimEnd() : raw;
+  }
+
+  return null;
+}
+
+function detectHeuristicPolicyCoverage(documents: ParsedDocument[]): string | null {
+  const combined = documents
+    .map((doc) => doc.extractedText)
+    .join('\n')
+    .toLowerCase();
+
+  const frameworks: string[] = [];
+  if (combined.includes('asc 326') || combined.includes('cecl')) {
+    frameworks.push('ASC 326 (CECL)');
+  }
+  if (combined.includes('sr 11-7')) {
+    frameworks.push('SR 11-7');
+  }
+  if (combined.includes('occ 2011-12')) {
+    frameworks.push('OCC 2011-12');
+  }
+
+  if (frameworks.length === 0) return null;
+  return frameworks.join(', ');
+}
+
+function detectHeuristicModelUsage(documents: ParsedDocument[]): string | null {
+  const combined = documents
+    .map((doc) => doc.extractedText)
+    .join('\n')
+    .toLowerCase();
+
+  const hasCecl = combined.includes('cecl') || combined.includes('expected credit loss');
+  const hasAllowance = combined.includes('allowance');
+  const hasReporting = combined.includes('reporting') || combined.includes('close');
+  if (!hasCecl || !hasAllowance) return null;
+
+  if (hasReporting) {
+    return 'Supports CECL allowance estimation for month-end and quarter-end close and reporting workflows.';
+  }
+
+  return 'Supports CECL allowance estimation and related model risk governance workflows.';
+}
+
+function buildHeuristicPrefillUpdates(
+  documents: ParsedDocument[],
+  existingUpdates: FieldUpdate[],
+): FieldUpdate[] {
+  const heuristicUpdates: FieldUpdate[] = [];
+
+  if (!hasScalarFieldUpdate(existingUpdates, 'model_summary', 'model_developer')) {
+    const developer = detectHeuristicModelDeveloper(documents);
+    if (developer) {
+      heuristicUpdates.push({
+        section: 'model_summary',
+        field: 'model_developer',
+        action: 'set',
+        value: developer,
+      });
+    }
+  }
+
+  if (!hasScalarFieldUpdate(existingUpdates, 'model_summary', 'policy_coverage')) {
+    const coverage = detectHeuristicPolicyCoverage(documents);
+    if (coverage) {
+      heuristicUpdates.push({
+        section: 'model_summary',
+        field: 'policy_coverage',
+        action: 'set',
+        value: coverage,
+      });
+    }
+  }
+
+  if (!hasScalarFieldUpdate(existingUpdates, 'model_summary', 'model_usage')) {
+    const usage = detectHeuristicModelUsage(documents);
+    if (usage) {
+      heuristicUpdates.push({
+        section: 'model_summary',
+        field: 'model_usage',
+        action: 'set',
+        value: usage,
+      });
+    }
+  }
+
+  return heuristicUpdates;
+}
+
 function sanitizeRawFieldUpdateEntries(raw: unknown): unknown[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter((entry) => entry && typeof entry === 'object');
@@ -779,7 +890,14 @@ async function extractPrefillFieldUpdates(
     }
   }
 
-  const finalUpdates = sanitizeExtractedFieldUpdates(rawFieldUpdates);
+  let finalUpdates = sanitizeExtractedFieldUpdates(rawFieldUpdates);
+  const heuristicUpdates = buildHeuristicPrefillUpdates(parsedDocuments, finalUpdates);
+  if (heuristicUpdates.length > 0) {
+    finalUpdates = sanitizeExtractedFieldUpdates([...finalUpdates, ...heuristicUpdates]);
+    notes.push(
+      `[heuristics] Added ${heuristicUpdates.length} model-summary update(s) from explicit document headers and regulatory references.`,
+    );
+  }
   const scalarFieldsFilled = new Set(
     finalUpdates
       .filter((update) => update.action !== 'add_row')
