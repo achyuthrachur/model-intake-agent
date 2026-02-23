@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import type { GeneratedReport, ReportSection } from '@/types';
+
+const PLACEHOLDER = '[Information not provided - to be completed by model owner]';
 
 interface ReportPreviewProps {
   report: GeneratedReport;
@@ -139,7 +141,21 @@ function SectionBlock({
   isRegenerating: boolean;
   anyRegenerating: boolean;
 }) {
-  const hasTable = isTableContent(section.content);
+  const trimmed = section.content.trim();
+  const isPlaceholder = trimmed === PLACEHOLDER;
+  const isEmpty = trimmed === '';
+  const hasRealContent = !isPlaceholder && !isEmpty;
+  const hasTable = hasRealContent && isTableContent(section.content);
+
+  const buttonLabel = isRegenerating
+    ? (isPlaceholder || isEmpty ? 'Generating…' : 'Regenerating…')
+    : (isPlaceholder || isEmpty ? 'Generate' : 'Regenerate');
+
+  const buttonIcon = isRegenerating
+    ? <Loader2 className="h-3 w-3 animate-spin" />
+    : isPlaceholder || isEmpty
+      ? <Sparkles className="h-3 w-3" />
+      : <RefreshCw className="h-3 w-3" />;
 
   return (
     <div className={isFirst ? '' : 'mt-8'}>
@@ -155,21 +171,35 @@ function SectionBlock({
             type="button"
             onClick={() => onRegenerate(section.id)}
             disabled={anyRegenerating}
-            title="Regenerate this section"
-            className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+            title={isPlaceholder || isEmpty ? 'Generate this section' : 'Regenerate this section'}
+            className={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              isPlaceholder || isEmpty
+                ? 'border-[var(--color-crowe-amber-core)]/40 bg-[var(--color-crowe-amber-core)]/8 text-[var(--color-crowe-indigo-dark)] hover:bg-[var(--color-crowe-amber-core)]/18 dark:text-[var(--color-crowe-amber-bright)]'
+                : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-primary'
+            }`}
           >
-            {isRegenerating ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3 w-3" />
-            )}
-            {isRegenerating ? 'Regenerating…' : 'Regenerate'}
+            {buttonIcon}
+            {buttonLabel}
           </button>
         )}
       </div>
-      <div className="flex flex-col gap-3">
-        {hasTable ? renderTable(section.content) : renderTextContent(section.content)}
-      </div>
+
+      {isPlaceholder ? (
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--color-crowe-amber-core)]/25 bg-[var(--color-crowe-amber-core)]/8 px-3 py-2.5">
+          <Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--color-crowe-amber-core)]" />
+          <p className="text-sm font-medium text-[var(--color-crowe-indigo-dark)] dark:text-[var(--color-crowe-amber-bright)]">
+            Ready to Generate!
+          </p>
+        </div>
+      ) : isEmpty ? (
+        <p className="text-sm italic text-muted-foreground">
+          No information provided — to be completed by model owner.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {hasTable ? renderTable(section.content) : renderTextContent(section.content)}
+        </div>
+      )}
     </div>
   );
 }
