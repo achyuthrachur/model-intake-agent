@@ -147,7 +147,23 @@ function buildNextQuestion(fieldPath: string | undefined): string | undefined {
   return base.endsWith('?') ? base : `${base}?`;
 }
 
-function appendDeterministicFollowUp(reply: string, nextQuestion: string | undefined): string {
+function countRecentAskCount(history: ChatMessage[], question: string): number {
+  if (!question) return 0;
+  const q = question.toLowerCase();
+  let count = 0;
+  for (const msg of history.slice(-10)) {
+    if (msg.role === 'assistant' && msg.content.toLowerCase().includes(q)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function appendDeterministicFollowUp(
+  reply: string,
+  nextQuestion: string | undefined,
+  conversationHistory: ChatMessage[],
+): string {
   const trimmedReply = reply.trim();
 
   if (!nextQuestion) {
@@ -157,9 +173,20 @@ function appendDeterministicFollowUp(reply: string, nextQuestion: string | undef
     );
   }
 
-  const normalizedReply = trimmedReply.toLowerCase();
-  const normalizedQuestion = nextQuestion.toLowerCase();
-  if (normalizedReply.includes(normalizedQuestion)) {
+  // The AI naturally ended with a question — don't stack another one on top
+  if (trimmedReply.endsWith('?')) {
+    return trimmedReply;
+  }
+
+  // The same question already appeared in recent assistant messages — the AI re-asked it in its
+  // own words; appending the schema wording on top would produce a double-question
+  const recentAssistant = conversationHistory.filter((m) => m.role === 'assistant').slice(-2);
+  const normalizedQ = nextQuestion.toLowerCase();
+  if (recentAssistant.some((m) => m.content.toLowerCase().includes(normalizedQ))) {
+    return trimmedReply || nextQuestion;
+  }
+
+  if (trimmedReply.toLowerCase().includes(normalizedQ)) {
     return trimmedReply;
   }
 
@@ -175,7 +202,18 @@ function buildIntakeSystemPrompt(
   orderedUnfilledFields: string[],
   nextFieldPath: string | undefined,
   nextQuestion: string | undefined,
+  consecutiveTurnsOnTarget: number,
 ): string {
+  const stuckWarning =
+    consecutiveTurnsOnTarget >= 2
+      ? [
+          '',
+          `STUCK FIELD ALERT: "${nextFieldPath}" has been the primary target for ${consecutiveTurnsOnTarget} consecutive turns without a direct answer.`,
+          'The user may not have this information available right now.',
+          'Ask the question one more time, then clearly offer: "If this doesn\'t apply or you don\'t have it available, just say \'skip\' or \'N/A\' and I\'ll record it as not available and move on."',
+        ].join('\n')
+      : '';
+
   return [
     'You are an experienced Model Risk Management (MRM) analyst running a model intake interview.',
     'You should capture structured values and keep the user moving through missing fields in order.',
@@ -188,6 +226,7 @@ function buildIntakeSystemPrompt(
     '',
     `PRIMARY TARGET FIELD THIS TURN: ${nextFieldPath ?? '[none]'}`,
     `PRIMARY TARGET QUESTION THIS TURN: ${nextQuestion ?? '[none]'}`,
+    stuckWarning,
     '',
     'When you learn structured data, emit updates in this exact format:',
     '<<<FIELD_UPDATE>>>',
@@ -199,7 +238,9 @@ function buildIntakeSystemPrompt(
     '- Prioritize ordered unfilled fields.',
     '- Focus first on the primary target field unless the user explicitly asks to revise another field.',
     '- Do not ask for fields that are already filled, unless the user asks to revise them.',
-    '- Ask one primary question at a time.',
+    '- Ask ONE primary question at a time — never ask the same question twice in one response.',
+    '- If the user says "skip", "N/A", or "not applicable" for the current field, emit a FIELD_UPDATE with value "N/A" and move on to the next field.',
+    '- If the user\'s answer addresses a field that is already filled rather than the target field, acknowledge it in one sentence, then ask the target question once — do NOT echo the already-filled data back.',
     '- Emit add_row actions for table data where relevant.',
     '- Do not return JSON outside FIELD_UPDATE blocks.',
     '- If the user provided data for multiple fields, capture all of them with FIELD_UPDATE blocks.',
@@ -222,6 +263,7 @@ export async function POST(request: NextRequest) {
     const orderedUnfilledBefore = getOrderedUnfilledFields(formState);
     const nextFieldBefore = orderedUnfilledBefore[0];
     const nextQuestionBefore = buildNextQuestion(nextFieldBefore);
+    const consecutiveTurns = countRecentAskCount(conversationHistory, nextQuestionBefore ?? '');
     const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-5-chat-latest';
 
     const client = getOpenAIClient();
@@ -230,6 +272,7 @@ export async function POST(request: NextRequest) {
       orderedUnfilledBefore,
       nextFieldBefore,
       nextQuestionBefore,
+      consecutiveTurns,
     );
     const historyMessages: OpenAI.Chat.ChatCompletionMessageParam[] = conversationHistory.map(
       (entry) => {
@@ -259,7 +302,7 @@ export async function POST(request: NextRequest) {
     const projectedState = applyFieldUpdatesToFormState(formState, parsed.fieldUpdates);
     const orderedUnfilledAfter = getOrderedUnfilledFields(projectedState);
     const nextQuestionAfter = buildNextQuestion(orderedUnfilledAfter[0]);
-    const aiReply = appendDeterministicFollowUp(parsed.cleanReply, nextQuestionAfter);
+    const aiReply = appendDeterministicFollowUp(parsed.cleanReply, nextQuestionAfter, conversationHistory);
 
     return NextResponse.json({
       aiReply,
