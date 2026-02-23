@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import anime from 'animejs/lib/anime.es.js';
 
 import { useIntakeStore } from '@/stores/intake-store';
+import { loadSession } from '@/lib/supabase-service';
+import type { IntakeSession } from '@/lib/supabase-service';
 import { prefersReducedMotion } from '@/lib/anime-motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Button } from '@/components/ui/button';
@@ -17,13 +19,79 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Brain, FileText, Shield, ArrowRight, Sparkles } from 'lucide-react';
+import { Brain, FileText, Shield, ArrowRight, Sparkles, History, X } from 'lucide-react';
 import type { AIModel, SessionMode } from '@/types';
+
+const SESSION_ID_KEY = 'intake_session_id';
 
 export default function LandingPage() {
   const router = useRouter();
   const store = useIntakeStore();
   const heroRef = useRef<HTMLDivElement>(null);
+  const [resumeSession, setResumeSession] = useState<IntakeSession | null>(null);
+
+  // Check localStorage for a saved session on mount
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const storedId = localStorage.getItem(SESSION_ID_KEY);
+        if (!storedId) return;
+        const session = await loadSession(storedId);
+        if (!cancelled && session && session.status === 'in_progress') {
+          setResumeSession(session);
+        }
+      } catch {
+        // Supabase unavailable or localStorage blocked — silently skip
+      }
+    };
+    void check();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleResume = () => {
+    if (!resumeSession) return;
+    // Restore store state from session
+    store.setBankName(resumeSession.bank_name);
+    store.setSessionId(resumeSession.id);
+    // Restore form data by updating each section
+    const fd = resumeSession.form_data;
+    if (fd) {
+      const keys = Object.keys(fd) as (keyof typeof fd)[];
+      for (const sectionKey of keys) {
+        const section = fd[sectionKey];
+        if (section && typeof section === 'object') {
+          for (const [field, value] of Object.entries(section as unknown as Record<string, unknown>)) {
+            store.updateField(sectionKey, field, value);
+          }
+        }
+      }
+    }
+    // Restore messages
+    if (Array.isArray(resumeSession.chat_history)) {
+      store.clearMessages();
+      for (const msg of resumeSession.chat_history) {
+        store.addMessage(msg);
+      }
+    }
+    // Restore step
+    const step = resumeSession.wizard_step;
+    if (step === 1 || step === 2 || step === 3) {
+      store.setStep(step);
+    }
+    router.push('/intake');
+  };
+
+  const handleStartFresh = () => {
+    try {
+      localStorage.removeItem(SESSION_ID_KEY);
+    } catch {
+      // ignore
+    }
+    setResumeSession(null);
+  };
 
   useEffect(() => {
     if (prefersReducedMotion()) return;
@@ -202,6 +270,51 @@ export default function LandingPage() {
                 Used in report headers and generated metadata.
               </p>
             </div>
+
+            {/* Resume Session Banner */}
+            {resumeSession && (
+              <div className="flex items-start gap-3 rounded-xl border border-[var(--color-crowe-indigo-bright)]/30 bg-[var(--color-crowe-indigo-bright)]/8 px-4 py-3">
+                <History className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-crowe-indigo-bright)]" />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    Resume last session
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {resumeSession.bank_name} &middot; Last updated{' '}
+                    {new Date(resumeSession.updated_at).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                  <div className="mt-1.5 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleResume}
+                      className="rounded-md bg-[var(--color-crowe-indigo-bright)] px-3 py-1 text-xs font-semibold text-white hover:bg-[var(--color-crowe-indigo-core)]"
+                    >
+                      Resume
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartFresh}
+                      className="rounded-md px-3 py-1 text-xs text-muted-foreground underline hover:text-foreground"
+                    >
+                      Start fresh
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleStartFresh}
+                  aria-label="Dismiss"
+                  className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">

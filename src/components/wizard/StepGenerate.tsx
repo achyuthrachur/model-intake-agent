@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useIntakeStore } from '@/stores/intake-store';
 import { generateReport } from '@/lib/api-client';
 import { useAnimeStagger } from '@/lib/anime-motion';
+import { TEMPLATE_SECTIONS } from '@/data/template-structure';
 import { ReportPreview } from '@/components/report/ReportPreview';
 import { ExportControls } from '@/components/report/ExportControls';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ const TOTAL_SECTIONS = 7;
 export function StepGenerate() {
   const store = useIntakeStore();
   const [error, setError] = useState<string | null>(null);
+  const [regenError, setRegenError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -46,6 +48,42 @@ export function StepGenerate() {
     duration: 440,
     y: 12,
   });
+
+  const handleRegenerateSection = useCallback(
+    async (sectionId: string) => {
+      setRegenError(null);
+      const sectionMeta = TEMPLATE_SECTIONS.find((s) => s.id === sectionId);
+      if (!sectionMeta) return;
+
+      try {
+        const response = await fetch('/api/regenerate-section', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sectionId,
+            sectionTitle: sectionMeta.title,
+            sectionDescription: sectionMeta.description,
+            formData: store.formData,
+            parsedDocuments: store.parsedDocuments,
+            bankName: store.bankName,
+            model: store.selectedModel,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          throw new Error(data.error ?? 'Regeneration failed');
+        }
+
+        const result = (await response.json()) as { id: string; title: string; content: string };
+        store.updateReportSection(result.id, result.content);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Section regeneration failed';
+        setRegenError(message);
+      }
+    },
+    [store],
+  );
 
   const handleGenerate = async () => {
     setError(null);
@@ -186,6 +224,26 @@ export function StepGenerate() {
         </div>
       )}
 
+      {/* Section Regeneration Error */}
+      {regenError && (
+        <div
+          data-reveal
+          className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/6 px-4 py-3"
+        >
+          <div className="flex flex-1 flex-col gap-1">
+            <p className="text-sm font-medium text-destructive">Section Regeneration Error</p>
+            <p className="text-xs text-muted-foreground">{regenError}</p>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 text-xs text-muted-foreground underline hover:text-foreground"
+            onClick={() => setRegenError(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Report Preview + Export Controls */}
       {isComplete && store.generatedReport && (
         <>
@@ -193,7 +251,10 @@ export function StepGenerate() {
             <ExportControls report={store.generatedReport} />
           </div>
           <div data-reveal className="surface-card rounded-2xl p-4 md:p-5">
-            <ReportPreview report={store.generatedReport} />
+            <ReportPreview
+              report={store.generatedReport}
+              onRegenerateSection={handleRegenerateSection}
+            />
           </div>
         </>
       )}

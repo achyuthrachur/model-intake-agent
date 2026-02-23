@@ -255,8 +255,11 @@ interface IntakeStore {
   setReportStatus: (status: 'idle' | 'generating' | 'complete' | 'error') => void;
   currentGeneratingSection: number;
   setCurrentGeneratingSection: (n: number) => void;
+  updateReportSection: (sectionId: string, content: string) => void;
 
   // Session
+  sessionId: string | null;
+  setSessionId: (id: string) => void;
   resetSession: () => void;
 }
 
@@ -485,6 +488,25 @@ export const useIntakeStore = create<IntakeStore>()((set, get) => ({
       currentGeneratingSection: 0,
       setCurrentGeneratingSection: (n: number) => set({ currentGeneratingSection: n }),
 
+      updateReportSection: (sectionId: string, content: string) =>
+        set((state) => {
+          if (!state.generatedReport) return state;
+          return {
+            generatedReport: {
+              ...state.generatedReport,
+              sections: state.generatedReport.sections.map((section) =>
+                section.id === sectionId ? { ...section, content } : section,
+              ),
+            },
+          };
+        }),
+
+      // --------------------------------------------------------
+      // Session
+      // --------------------------------------------------------
+      sessionId: null,
+      setSessionId: (id: string) => set({ sessionId: id }),
+
       // --------------------------------------------------------
       // Session reset
       // --------------------------------------------------------
@@ -501,5 +523,6 @@ export const useIntakeStore = create<IntakeStore>()((set, get) => ({
           reportStatus: 'idle',
           currentGeneratingSection: 0,
           recentlyUpdatedFields: new Set<string>(),
+          sessionId: null,
         }),
     }));

@@ -2,13 +2,18 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Footer,
+  Header,
   HeadingLevel,
+  PageNumber,
   Packer,
   PageBreak,
   Paragraph,
   Table,
   TableCell,
   TableRow,
+  TabStopPosition,
+  TabStopType,
   TextRun,
   WidthType,
 } from 'docx';
@@ -58,10 +63,22 @@ function parseMarkdownTable(content: string): { headers: string[]; rows: string[
   return { headers, rows };
 }
 
-function createDocxTable(headers: string[], rows: string[][]): Table {
+function computeColumnWidths(colCount: number): number[] {
+  if (colCount === 1) return [100];
+  if (colCount === 2) return [35, 65];
+  // 3+ columns: first at 40%, rest evenly split from 60%
+  const remainder = Math.floor(60 / (colCount - 1));
+  return [40, ...Array(colCount - 1).fill(remainder)];
+}
+
+function createDocxTable(headers: string[], rows: string[][], columnWidths?: number[]): Table {
+  const colCount = headers.length || 1;
+  const widths = columnWidths ?? computeColumnWidths(colCount);
+
   const headerCells = headers.map(
-    (header) =>
+    (header, colIdx) =>
       new TableCell({
+        width: { size: widths[colIdx] ?? Math.floor(100 / colCount), type: WidthType.PERCENTAGE },
         children: [
           new Paragraph({
             children: [
@@ -89,10 +106,12 @@ function createDocxTable(headers: string[], rows: string[][]): Table {
     (row, rowIndex) =>
       new TableRow({
         children: row.map(
-          (cell) =>
+          (cell, colIdx) =>
             new TableCell({
+              width: { size: widths[colIdx] ?? Math.floor(100 / colCount), type: WidthType.PERCENTAGE },
               children: [
                 new Paragraph({
+                  spacing: { after: 80 },
                   children: [
                     new TextRun({
                       text: cell,
@@ -122,7 +141,7 @@ function createDocxTable(headers: string[], rows: string[][]): Table {
 
 function createParagraph(text: string, size = 22): Paragraph {
   return new Paragraph({
-    spacing: { after: 200 },
+    spacing: { after: 160 },
     children: [new TextRun({ text, size, font: 'Helvetica Neue' })],
   });
 }
@@ -339,14 +358,99 @@ function buildBodySections(report: GeneratedReport): (Paragraph | Table)[] {
   return bodyElements;
 }
 
+function buildPageHeader(report: GeneratedReport): Header {
+  return new Header({
+    children: [
+      new Paragraph({
+        tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
+        children: [
+          new TextRun({
+            text: report.bankName,
+            bold: true,
+            size: 20,
+            color: CROWE_INDIGO,
+            font: 'Helvetica Neue',
+          }),
+          new TextRun({
+            text: '\t',
+            size: 18,
+            font: 'Helvetica Neue',
+          }),
+          new TextRun({
+            text: 'MODEL DOCUMENTATION',
+            size: 18,
+            color: DOCX_CROWE_MUTED,
+            font: 'Helvetica Neue',
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+function buildPageFooter(report: GeneratedReport): Footer {
+  const generatedDate = new Date(report.generatedAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  return new Footer({
+    children: [
+      new Paragraph({
+        tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
+        children: [
+          new TextRun({
+            text: `Confidential | Generated ${generatedDate}`,
+            size: 18,
+            color: DOCX_CROWE_MUTED,
+            font: 'Helvetica Neue',
+          }),
+          new TextRun({
+            text: '\t',
+            size: 18,
+            font: 'Helvetica Neue',
+          }),
+          new TextRun({
+            children: [PageNumber.CURRENT],
+            size: 18,
+            color: DOCX_CROWE_MUTED,
+            font: 'Helvetica Neue',
+          }),
+          new TextRun({
+            text: ' / ',
+            size: 18,
+            color: DOCX_CROWE_MUTED,
+            font: 'Helvetica Neue',
+          }),
+          new TextRun({
+            children: [PageNumber.TOTAL_PAGES],
+            size: 18,
+            color: DOCX_CROWE_MUTED,
+            font: 'Helvetica Neue',
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
 export async function generateDocx(report: GeneratedReport): Promise<void> {
   const coverPage = buildCoverPage(report);
   const titleAndTocPage = buildTitleAndTocPage(report);
   const bodySections = buildBodySections(report);
 
+  const pageHeader = buildPageHeader(report);
+  const pageFooter = buildPageFooter(report);
+
   const doc = new Document({
+    title: `${report.bankName} – Model Documentation`,
+    subject: report.modelName,
+    creator: `${report.bankName} – Model Risk Management`,
     sections: [
       {
+        headers: { default: pageHeader },
+        footers: { default: pageFooter },
         children: [...coverPage, ...titleAndTocPage, ...bodySections],
       },
     ],

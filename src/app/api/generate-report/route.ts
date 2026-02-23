@@ -134,14 +134,17 @@ function buildPrompt(
     '- Include every requested section ID exactly once.',
     '- Match each section to its specific title and description from the section plan below.',
     '- Do not shift implementation text into back-testing sections, or governance text into design sections.',
-    '- Narrative sections should be detailed and specific (typically 2-4 substantive paragraphs, ~120-260 words per section).',
-    '- Explicitly reference concrete model/process details (methods, controls, cadence, data lineage, thresholds, ownership) when available.',
-    '- If using document evidence, cite source filename inline, e.g. "(Source: Vendor_Implementation_Production_Runbook.docx)".',
-    '- Avoid vague claims such as "controls are in place" unless supported by intake or document evidence.',
-    '- If data is missing, use: [Information not provided - to be completed by model owner].',
-    '- For section 1.4 produce a markdown assumptions table with columns: Assumption | Evidence | Operational Impact.',
-    '- For section 1.5 produce a markdown limitations table with columns: Limitation | Impact | Mitigating Risk.',
-    '- For section 7.3 produce a markdown references table with columns: Name | Type | Description.',
+    '- Narrative sections MUST be detailed and specific: write at least 3–5 substantive paragraphs (minimum 200 words) per subsection.',
+    '- Explicitly reference concrete details from the intake form: model names, dates, system names, thresholds, ownership, cadence, and data lineage.',
+    '- Ground every claim in document evidence or intake responses. If using document evidence, cite inline as "(Source: filename.docx)".',
+    '- Avoid all vague filler such as "controls are in place", "processes exist", or "the model performs well" unless backed by specific evidence.',
+    '- If data is genuinely missing, use exactly: [Information not provided - to be completed by model owner].',
+    '- For section 1.4 produce ONLY a markdown assumptions table with columns: Assumption | Evidence | Operational Impact.',
+    '  Example: | The PD calibration remains stable across economic cycles | (Source: Vendor_Model_Guide.docx) | Recalibration required if macro regime shifts significantly |',
+    '- For section 1.5 produce ONLY a markdown limitations table with columns: Limitation | Impact | Mitigating Risk.',
+    '  Example: | Model trained on pre-2020 data only | Potential underestimation of tail losses | Annual back-test comparison to current cohort |',
+    '- For section 7.3 produce ONLY a markdown references table with columns: Name | Type | Description.',
+    '  Example: | SR 11-7 | Regulatory Guidance | Federal Reserve guidance on model risk management |',
     '',
     'SECTION PLAN (authoritative mapping for IDs):',
     JSON.stringify(sectionTargets, null, 2),
@@ -192,7 +195,7 @@ export async function POST(request: NextRequest) {
     const completion = await client.chat.completions.create({
       model,
       temperature: 0.25,
-      max_tokens: 9000,
+      max_tokens: 16000,
       response_format: { type: 'json_object' },
       messages: [{ role: 'user', content: prompt }],
     });
@@ -218,12 +221,13 @@ export async function POST(request: NextRequest) {
       }
 
       const aiContent = generatedSectionMap.get(section.id);
+      const trimmed = aiContent?.trim() ?? '';
       return {
         id: section.id,
         title: section.title,
         content:
-          aiContent && aiContent.trim()
-            ? aiContent.trim()
+          trimmed.length >= 80
+            ? trimmed
             : '[Information not provided - to be completed by model owner]',
       };
     });

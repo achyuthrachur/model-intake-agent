@@ -1,9 +1,12 @@
 'use client';
 
+import { useState } from 'react';
+import { RefreshCw, Loader2 } from 'lucide-react';
 import type { GeneratedReport, ReportSection } from '@/types';
 
 interface ReportPreviewProps {
   report: GeneratedReport;
+  onRegenerateSection?: (sectionId: string) => Promise<void>;
 }
 
 function isTableContent(content: string): boolean {
@@ -123,17 +126,47 @@ function renderTextContent(content: string): React.ReactNode {
   });
 }
 
-function SectionBlock({ section, isFirst }: { section: ReportSection; isFirst: boolean }) {
+function SectionBlock({
+  section,
+  isFirst,
+  onRegenerate,
+  isRegenerating,
+  anyRegenerating,
+}: {
+  section: ReportSection;
+  isFirst: boolean;
+  onRegenerate?: (sectionId: string) => Promise<void>;
+  isRegenerating: boolean;
+  anyRegenerating: boolean;
+}) {
   const hasTable = isTableContent(section.content);
 
   return (
     <div className={isFirst ? '' : 'mt-8'}>
-      <h2
-        className="mb-3 border-b border-border pb-2 text-base font-bold text-primary"
-        style={{ fontFamily: 'var(--font-display)' }}
-      >
-        {section.title}
-      </h2>
+      <div className="mb-3 flex items-center justify-between gap-2 border-b border-border pb-2">
+        <h2
+          className="text-base font-bold text-primary"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          {section.title}
+        </h2>
+        {onRegenerate && (
+          <button
+            type="button"
+            onClick={() => onRegenerate(section.id)}
+            disabled={anyRegenerating}
+            title="Regenerate this section"
+            className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isRegenerating ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            {isRegenerating ? 'Regenerating…' : 'Regenerate'}
+          </button>
+        )}
+      </div>
       <div className="flex flex-col gap-3">
         {hasTable ? renderTable(section.content) : renderTextContent(section.content)}
       </div>
@@ -141,9 +174,21 @@ function SectionBlock({ section, isFirst }: { section: ReportSection; isFirst: b
   );
 }
 
-export function ReportPreview({ report }: ReportPreviewProps) {
+export function ReportPreview({ report, onRegenerateSection }: ReportPreviewProps) {
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+
   const modelSummarySection = report.sections.find((s) => s.id === 'model_summary');
   const bodySections = report.sections.filter((s) => s.id !== 'model_summary');
+
+  const handleRegenerate = async (sectionId: string) => {
+    if (!onRegenerateSection || regeneratingId !== null) return;
+    setRegeneratingId(sectionId);
+    try {
+      await onRegenerateSection(sectionId);
+    } finally {
+      setRegeneratingId(null);
+    }
+  };
 
   return (
     <div className="rounded-xl border border-border/75 bg-background/65 p-6 md:p-8">
@@ -197,7 +242,14 @@ export function ReportPreview({ report }: ReportPreviewProps) {
 
       {/* Body Sections */}
       {bodySections.map((section, idx) => (
-        <SectionBlock key={section.id} section={section} isFirst={idx === 0 && !modelSummarySection} />
+        <SectionBlock
+          key={section.id}
+          section={section}
+          isFirst={idx === 0 && !modelSummarySection}
+          onRegenerate={onRegenerateSection ? handleRegenerate : undefined}
+          isRegenerating={regeneratingId === section.id}
+          anyRegenerating={regeneratingId !== null}
+        />
       ))}
 
       {/* Generation Notes */}
