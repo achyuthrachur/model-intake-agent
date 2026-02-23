@@ -725,6 +725,14 @@ export function selectSuggestedDemoMessage(
     return fieldMatched.text;
   }
 
+  // Only use the intent-based fallback when a specific intent was actually matched.
+  // If only 'fallback' was inferred (no pattern matched the question), returning a
+  // random rotation entry produces a visibly irrelevant suggestion — it's better to
+  // show nothing.
+  const inferredIntents = inferIntents(latestAssistantQuestion);
+  const hasSpecificIntent = inferredIntents.some((intent) => intent !== 'fallback');
+  if (!hasSpecificIntent) return undefined;
+
   const selected = selectEntryForQuestion(latestAssistantQuestion, answers, state);
   return selected?.text;
 }
