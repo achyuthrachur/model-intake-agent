@@ -670,7 +670,7 @@ async function runPrefillExtractionPass(
   const completion = await client.chat.completions.create({
     model,
     temperature: 0,
-    max_tokens: getServerEnvInt('OPENAI_PREFILL_MAX_TOKENS', 4200),
+    max_completion_tokens: getServerEnvInt('OPENAI_PREFILL_MAX_TOKENS', 4200),
     response_format: { type: 'json_object' },
     messages: [{ role: 'user', content: prompt }],
   });
@@ -733,7 +733,7 @@ async function classifyDocument(
   const completion = await client.chat.completions.create({
     model,
     temperature: 0.2,
-    max_tokens: getServerEnvInt('OPENAI_CLASSIFY_MAX_TOKENS', 2500),
+    max_completion_tokens: getServerEnvInt('OPENAI_CLASSIFY_MAX_TOKENS', 2500),
     response_format: { type: 'json_object' },
     messages: [{ role: 'user', content: prompt }],
   });
@@ -932,7 +932,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'files are required' }, { status: 400 });
     }
 
-    const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5-chat-latest';
+    const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5.5';
     const client = getOpenAIClient();
     const parsedDocuments: ParsedDocument[] = [];
 

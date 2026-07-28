@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
     }
 
     const parsedDocuments = sanitizeParsedDocuments(body.parsedDocuments);
-    const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5-chat-latest';
+    const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5.5';
     const client = getOpenAIClient();
 
     const modelSummaryContent = buildModelSummaryTable(intakeData as IntakeFormState);
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
     const completion = await client.chat.completions.create({
       model,
       temperature: 0.25,
-      max_tokens: getServerEnvInt('OPENAI_REPORT_MAX_TOKENS', 16000),
+      max_completion_tokens: getServerEnvInt('OPENAI_REPORT_MAX_TOKENS', 16000),
       response_format: { type: 'json_object' },
       messages: [{ role: 'user', content: prompt }],
     });

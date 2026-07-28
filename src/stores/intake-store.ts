@@ -271,7 +271,7 @@ export const useIntakeStore = create<IntakeStore>()((set, get) => ({
       // --------------------------------------------------------
       // Config
       // --------------------------------------------------------
-      selectedModel: 'gpt-5-chat-latest' as AIModel,
+      selectedModel: 'gpt-5.5' as AIModel,
       setSelectedModel: (model: AIModel) => set({ selectedModel: model }),
 
       bankName: '',

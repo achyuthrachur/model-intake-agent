@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
     const nextFieldBefore = orderedUnfilledBefore[0];
     const nextQuestionBefore = buildNextQuestion(nextFieldBefore);
     const consecutiveTurns = countRecentAskCount(conversationHistory, nextQuestionBefore ?? '');
-    const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5-chat-latest';
+    const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5.5';
     const maxTokens = getServerEnvInt('OPENAI_CHAT_MAX_TOKENS', 4000);
 
     const client = getOpenAIClient();
@@ -285,7 +285,7 @@ export async function POST(request: NextRequest) {
     const completion = await client.chat.completions.create({
       model,
       temperature: 0.4,
-      max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
       messages: [
         { role: 'system', content: systemPrompt },
         ...historyMessages,
