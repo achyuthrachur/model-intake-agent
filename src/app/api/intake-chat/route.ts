@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { getRequiredServerEnv, getServerEnv, getServerEnvInt } from '@/lib/server-env';
+import { getRequiredServerEnv, getServerEnv, getServerEnvInt, modelSupportsCustomTemperature } from '@/lib/server-env';
 import { parseFieldUpdates } from '@/lib/field-update-parser';
 import { INTAKE_SCHEMA } from '@/lib/intake-schema';
 import type { AIModel, ChatMessage, IntakeFormState } from '@/types';
@@ -284,7 +284,7 @@ export async function POST(request: NextRequest) {
 
     const completion = await client.chat.completions.create({
       model,
-      temperature: 0.4,
+      ...(modelSupportsCustomTemperature(model) ? { temperature: 0.4 } : {}),
       max_completion_tokens: maxTokens,
       messages: [
         { role: 'system', content: systemPrompt },

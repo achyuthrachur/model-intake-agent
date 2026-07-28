@@ -29,6 +29,10 @@ export function getServerEnvInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+export function modelSupportsCustomTemperature(model: string): boolean {
+  return !model.startsWith('gpt-5');
+}
+
 export function getRequiredServerEnv(name: string): string {
   const value = getServerEnv(name);
   if (value) {

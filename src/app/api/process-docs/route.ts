@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { getRequiredServerEnv, getServerEnv, getServerEnvInt } from '@/lib/server-env';
+import { getRequiredServerEnv, getServerEnv, getServerEnvInt, modelSupportsCustomTemperature } from '@/lib/server-env';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import { TEMPLATE_SECTIONS } from '@/data/template-structure';
@@ -669,7 +669,7 @@ async function runPrefillExtractionPass(
 
   const completion = await client.chat.completions.create({
     model,
-    temperature: 0,
+    ...(modelSupportsCustomTemperature(model) ? { temperature: 0 } : {}),
     max_completion_tokens: getServerEnvInt('OPENAI_PREFILL_MAX_TOKENS', 4200),
     response_format: { type: 'json_object' },
     messages: [{ role: 'user', content: prompt }],
@@ -732,7 +732,7 @@ async function classifyDocument(
 
   const completion = await client.chat.completions.create({
     model,
-    temperature: 0.2,
+    ...(modelSupportsCustomTemperature(model) ? { temperature: 0.2 } : {}),
     max_completion_tokens: getServerEnvInt('OPENAI_CLASSIFY_MAX_TOKENS', 2500),
     response_format: { type: 'json_object' },
     messages: [{ role: 'user', content: prompt }],

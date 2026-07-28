@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { getRequiredServerEnv, getServerEnv, getServerEnvInt } from '@/lib/server-env';
+import { getRequiredServerEnv, getServerEnv, getServerEnvInt, modelSupportsCustomTemperature } from '@/lib/server-env';
 import { TEMPLATE_SECTIONS } from '@/data/template-structure';
 import type { AIModel, GeneratedReport, IntakeFormState, ParsedDocument, ReportSection } from '@/types';
 
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
 
     const completion = await client.chat.completions.create({
       model,
-      temperature: 0.25,
+      ...(modelSupportsCustomTemperature(model) ? { temperature: 0.25 } : {}),
       max_completion_tokens: getServerEnvInt('OPENAI_REPORT_MAX_TOKENS', 16000),
       response_format: { type: 'json_object' },
       messages: [{ role: 'user', content: prompt }],
