@@ -16,6 +16,7 @@ import type {
 } from '@/types';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 interface ProcessDocumentsPayload {
   files: {
@@ -809,27 +810,43 @@ async function extractPrefillFieldUpdates(
     sectionCatalogMap.set(entry.section, current);
   }
 
-  const orderedSections = [...new Set(PREFILL_SECTION_ORDER)];
-  for (const section of orderedSections) {
-    const catalog = sectionCatalogMap.get(section) ?? [];
-    if (catalog.length === 0) continue;
+  const orderedSections = [...new Set(PREFILL_SECTION_ORDER)].filter(
+    (section) => (sectionCatalogMap.get(section) ?? []).length > 0,
+  );
+  const sectionPassResults = await Promise.all(
+    orderedSections.map(async (section) => {
+      const catalog = sectionCatalogMap.get(section) ?? [];
+      const docsForSection = selectDocumentsForSection(section, docsWithText);
+      const passName = `section_${section}`;
+      try {
+        const result = await runPrefillExtractionPass(client, model, passName, catalog, docsForSection);
+        return { passName, result };
+      } catch (error) {
+        console.error(`process-docs: prefill section pass failed (${passName})`, error);
+        return {
+          passName,
+          error: {
+            requestedFields: catalog.length,
+            docCount: docsForSection.length,
+          },
+        };
+      }
+    }),
+  );
 
-    const docsForSection = selectDocumentsForSection(section, docsWithText);
-    const passName = `section_${section}`;
-    try {
-      const result = await runPrefillExtractionPass(client, model, passName, catalog, docsForSection);
-      rawFieldUpdates.push(...result.rawFieldUpdates);
-      notes.push(...result.notes.map((note) => `[${passName}] ${note}`));
-      passDiagnostics.push(result.passDiagnostics);
-    } catch (error) {
-      console.error(`process-docs: prefill section pass failed (${passName})`, error);
-      notes.push(`[${passName}] extraction failed.`);
+  for (const entry of sectionPassResults) {
+    if (entry.result) {
+      rawFieldUpdates.push(...entry.result.rawFieldUpdates);
+      notes.push(...entry.result.notes.map((note) => `[${entry.passName}] ${note}`));
+      passDiagnostics.push(entry.result.passDiagnostics);
+    } else if (entry.error) {
+      notes.push(`[${entry.passName}] extraction failed.`);
       passDiagnostics.push({
-        pass: passName,
-        requestedFields: catalog.length,
+        pass: entry.passName,
+        requestedFields: entry.error.requestedFields,
         extractedUpdates: 0,
         noteCount: 1,
-        docCount: docsForSection.length,
+        docCount: entry.error.docCount,
       });
     }
   }
@@ -839,27 +856,36 @@ async function extractPrefillFieldUpdates(
   const scalarCatalog = FIELD_CATALOG.filter((entry) => entry.type !== 'table');
   const remainingScalarCatalog = selectRemainingCatalog(scalarCatalog, consolidatedUpdates);
   const scalarBatches = chunkArray(remainingScalarCatalog, 40).slice(0, 2);
-  for (let index = 0; index < scalarBatches.length; index += 1) {
-    const batch = scalarBatches[index];
-    const passName = `remaining_scalar_${index + 1}`;
-    try {
-      const result = await runPrefillExtractionPass(client, model, passName, batch, docsWithText);
-      rawFieldUpdates.push(...result.rawFieldUpdates);
-      notes.push(...result.notes.map((note) => `[${passName}] ${note}`));
-      passDiagnostics.push(result.passDiagnostics);
-      consolidatedUpdates = sanitizeExtractedFieldUpdates(rawFieldUpdates);
-    } catch (error) {
-      console.error(`process-docs: prefill remaining scalar pass failed (${passName})`, error);
-      notes.push(`[${passName}] extraction failed.`);
+  const scalarBatchResults = await Promise.all(
+    scalarBatches.map(async (batch, index) => {
+      const passName = `remaining_scalar_${index + 1}`;
+      try {
+        const result = await runPrefillExtractionPass(client, model, passName, batch, docsWithText);
+        return { passName, result };
+      } catch (error) {
+        console.error(`process-docs: prefill remaining scalar pass failed (${passName})`, error);
+        return { passName, error: { requestedFields: batch.length } };
+      }
+    }),
+  );
+
+  for (const entry of scalarBatchResults) {
+    if (entry.result) {
+      rawFieldUpdates.push(...entry.result.rawFieldUpdates);
+      notes.push(...entry.result.notes.map((note) => `[${entry.passName}] ${note}`));
+      passDiagnostics.push(entry.result.passDiagnostics);
+    } else if (entry.error) {
+      notes.push(`[${entry.passName}] extraction failed.`);
       passDiagnostics.push({
-        pass: passName,
-        requestedFields: batch.length,
+        pass: entry.passName,
+        requestedFields: entry.error.requestedFields,
         extractedUpdates: 0,
         noteCount: 1,
         docCount: docsWithText.length,
       });
     }
   }
+  consolidatedUpdates = sanitizeExtractedFieldUpdates(rawFieldUpdates);
 
   const tableCatalog = FIELD_CATALOG.filter((entry) => entry.type === 'table');
   const remainingTableCatalog = selectRemainingCatalog(tableCatalog, consolidatedUpdates);
@@ -934,48 +960,48 @@ export async function POST(request: NextRequest) {
 
     const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5.5';
     const client = getOpenAIClient();
-    const parsedDocuments: ParsedDocument[] = [];
 
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files[index];
-      try {
-        const extractedText = await extractTextFromFile(file);
-        const classified = await classifyDocument(client, model, file.filename, extractedText);
+    const parsedDocuments: ParsedDocument[] = await Promise.all(
+      files.map(async (file, index) => {
+        try {
+          const extractedText = await extractTextFromFile(file);
+          const classified = await classifyDocument(client, model, file.filename, extractedText);
 
-        const sectionsCovered = Object.entries(classified.coverage)
-          .filter(([, value]) => value.status !== 'gap')
-          .map(([key]) => key);
+          const sectionsCovered = Object.entries(classified.coverage)
+            .filter(([, value]) => value.status !== 'gap')
+            .map(([key]) => key);
 
-        const coverageDetail: Record<string, CoverageEntry> = {};
-        for (const [sectionId, entry] of Object.entries(classified.coverage)) {
-          if (entry.status === 'gap') continue;
-          coverageDetail[sectionId] = {
-            covered: entry.status === 'covered',
-            confidence: entry.confidence,
-            summary: entry.summary,
+          const coverageDetail: Record<string, CoverageEntry> = {};
+          for (const [sectionId, entry] of Object.entries(classified.coverage)) {
+            if (entry.status === 'gap') continue;
+            coverageDetail[sectionId] = {
+              covered: entry.status === 'covered',
+              confidence: entry.confidence,
+              summary: entry.summary,
+            };
+          }
+
+          return {
+            id: `doc_${index + 1}`,
+            filename: file.filename,
+            extractedText,
+            sectionsCovered,
+            coverageDetail,
+            documentSummary: classified.documentSummary,
+          };
+        } catch (error) {
+          console.error(`process-docs: failed to process ${file.filename}`, error);
+          return {
+            id: `doc_${index + 1}`,
+            filename: file.filename,
+            extractedText: '',
+            sectionsCovered: [],
+            coverageDetail: {},
+            documentSummary: 'Failed to process this document.',
           };
         }
-
-        parsedDocuments.push({
-          id: `doc_${index + 1}`,
-          filename: file.filename,
-          extractedText,
-          sectionsCovered,
-          coverageDetail,
-          documentSummary: classified.documentSummary,
-        });
-      } catch (error) {
-        console.error(`process-docs: failed to process ${file.filename}`, error);
-        parsedDocuments.push({
-          id: `doc_${index + 1}`,
-          filename: file.filename,
-          extractedText: '',
-          sectionsCovered: [],
-          coverageDetail: {},
-          documentSummary: 'Failed to process this document.',
-        });
-      }
-    }
+      }),
+    );
 
     const overallCoverage: CoverageAnalysis['overallCoverage'] = {};
     const gaps: string[] = [];
