@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { getRequiredServerEnv, getServerEnv } from '@/lib/server-env';
 import type { AIModel, IntakeFormState, ParsedDocument } from '@/types';
 
 export const runtime = 'nodejs';
@@ -21,8 +22,7 @@ interface RegenerateSectionResponse {
 }
 
 function getOpenAIClient(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OPENAI_API_KEY is not configured');
+  const apiKey = getRequiredServerEnv('OPENAI_API_KEY');
   return new OpenAI({ apiKey });
 }
 
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     }
 
     const parsedDocuments = sanitizeParsedDocuments(body.parsedDocuments);
-    const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-5-chat-latest';
+    const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5-chat-latest';
     const client = getOpenAIClient();
 
     const prompt = buildSectionPrompt(
@@ -156,3 +156,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to regenerate section' }, { status: 500 });
   }
 }
+

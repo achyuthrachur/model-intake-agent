@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { getRequiredServerEnv, getServerEnv } from '@/lib/server-env';
 import { parseFieldUpdates } from '@/lib/field-update-parser';
 import { INTAKE_SCHEMA } from '@/lib/intake-schema';
 import type { AIModel, ChatMessage, IntakeFormState } from '@/types';
@@ -39,10 +40,7 @@ const FIELD_QUESTION_BY_PATH = new Map<string, string>(
 );
 
 function getOpenAIClient(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is not configured');
-  }
+  const apiKey = getRequiredServerEnv('OPENAI_API_KEY');
   return new OpenAI({ apiKey });
 }
 
@@ -264,7 +262,7 @@ export async function POST(request: NextRequest) {
     const nextFieldBefore = orderedUnfilledBefore[0];
     const nextQuestionBefore = buildNextQuestion(nextFieldBefore);
     const consecutiveTurns = countRecentAskCount(conversationHistory, nextQuestionBefore ?? '');
-    const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-5-chat-latest';
+    const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5-chat-latest';
 
     const client = getOpenAIClient();
     const systemPrompt = buildIntakeSystemPrompt(
@@ -313,3 +311,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to process intake chat' }, { status: 500 });
   }
 }
+

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { getRequiredServerEnv, getServerEnv } from '@/lib/server-env';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import { TEMPLATE_SECTIONS } from '@/data/template-structure';
@@ -186,10 +187,7 @@ const PREFILL_SECTION_HINTS: Record<string, string[]> = {
 };
 
 function getOpenAIClient(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is not configured');
-  }
+  const apiKey = getRequiredServerEnv('OPENAI_API_KEY');
   return new OpenAI({ apiKey });
 }
 
@@ -933,7 +931,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'files are required' }, { status: 400 });
     }
 
-    const model = body.model || (process.env.DEFAULT_AI_MODEL as AIModel) || 'gpt-5-chat-latest';
+    const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5-chat-latest';
     const client = getOpenAIClient();
     const parsedDocuments: ParsedDocument[] = [];
 
@@ -1037,3 +1035,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to process documents' }, { status: 500 });
   }
 }
+
