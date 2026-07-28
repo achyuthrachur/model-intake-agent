@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { getRequiredServerEnv, getServerEnv } from '@/lib/server-env';
+import { getRequiredServerEnv, getServerEnv, getServerEnvInt } from '@/lib/server-env';
 import pdf from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import { TEMPLATE_SECTIONS } from '@/data/template-structure';
@@ -670,7 +670,7 @@ async function runPrefillExtractionPass(
   const completion = await client.chat.completions.create({
     model,
     temperature: 0,
-    max_tokens: 4200,
+    max_tokens: getServerEnvInt('OPENAI_PREFILL_MAX_TOKENS', 4200),
     response_format: { type: 'json_object' },
     messages: [{ role: 'user', content: prompt }],
   });
@@ -733,6 +733,7 @@ async function classifyDocument(
   const completion = await client.chat.completions.create({
     model,
     temperature: 0.2,
+    max_tokens: getServerEnvInt('OPENAI_CLASSIFY_MAX_TOKENS', 2500),
     response_format: { type: 'json_object' },
     messages: [{ role: 'user', content: prompt }],
   });
@@ -1035,4 +1036,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to process documents' }, { status: 500 });
   }
 }
+
 

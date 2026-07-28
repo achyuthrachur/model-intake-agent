@@ -21,6 +21,14 @@ export function getServerEnv(name: string): string | undefined {
   return undefined;
 }
 
+export function getServerEnvInt(name: string, fallback: number): number {
+  const value = getServerEnv(name);
+  if (!value) return fallback;
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export function getRequiredServerEnv(name: string): string {
   const value = getServerEnv(name);
   if (value) {

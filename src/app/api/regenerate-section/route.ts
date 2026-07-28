@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { getRequiredServerEnv, getServerEnv } from '@/lib/server-env';
+import { getRequiredServerEnv, getServerEnv, getServerEnvInt } from '@/lib/server-env';
 import type { AIModel, IntakeFormState, ParsedDocument } from '@/types';
 
 export const runtime = 'nodejs';
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
     const completion = await client.chat.completions.create({
       model,
       temperature: 0.25,
-      max_tokens: 2000,
+      max_tokens: getServerEnvInt('OPENAI_REGENERATE_MAX_TOKENS', 4000),
       response_format: { type: 'json_object' },
       messages: [{ role: 'user', content: prompt }],
     });
@@ -156,4 +156,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to regenerate section' }, { status: 500 });
   }
 }
+
 

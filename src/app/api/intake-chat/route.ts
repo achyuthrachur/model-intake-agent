@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { getRequiredServerEnv, getServerEnv } from '@/lib/server-env';
+import { getRequiredServerEnv, getServerEnv, getServerEnvInt } from '@/lib/server-env';
 import { parseFieldUpdates } from '@/lib/field-update-parser';
 import { INTAKE_SCHEMA } from '@/lib/intake-schema';
 import type { AIModel, ChatMessage, IntakeFormState } from '@/types';
@@ -171,13 +171,10 @@ function appendDeterministicFollowUp(
     );
   }
 
-  // The AI naturally ended with a question — don't stack another one on top
   if (trimmedReply.endsWith('?')) {
     return trimmedReply;
   }
 
-  // The same question already appeared in recent assistant messages — the AI re-asked it in its
-  // own words; appending the schema wording on top would produce a double-question
   const recentAssistant = conversationHistory.filter((m) => m.role === 'assistant').slice(-2);
   const normalizedQ = nextQuestion.toLowerCase();
   if (recentAssistant.some((m) => m.content.toLowerCase().includes(normalizedQ))) {
@@ -236,9 +233,9 @@ function buildIntakeSystemPrompt(
     '- Prioritize ordered unfilled fields.',
     '- Focus first on the primary target field unless the user explicitly asks to revise another field.',
     '- Do not ask for fields that are already filled, unless the user asks to revise them.',
-    '- Ask ONE primary question at a time — never ask the same question twice in one response.',
+    '- Ask ONE primary question at a time - never ask the same question twice in one response.',
     '- If the user says "skip", "N/A", or "not applicable" for the current field, emit a FIELD_UPDATE with value "N/A" and move on to the next field.',
-    '- If the user\'s answer addresses a field that is already filled rather than the target field, acknowledge it in one sentence, then ask the target question once — do NOT echo the already-filled data back.',
+    '- If the user\'s answer addresses a field that is already filled rather than the target field, acknowledge it in one sentence, then ask the target question once - do NOT echo the already-filled data back.',
     '- Emit add_row actions for table data where relevant.',
     '- Do not return JSON outside FIELD_UPDATE blocks.',
     '- If the user provided data for multiple fields, capture all of them with FIELD_UPDATE blocks.',
@@ -263,6 +260,7 @@ export async function POST(request: NextRequest) {
     const nextQuestionBefore = buildNextQuestion(nextFieldBefore);
     const consecutiveTurns = countRecentAskCount(conversationHistory, nextQuestionBefore ?? '');
     const model = body.model || (getServerEnv('DEFAULT_AI_MODEL') as AIModel) || 'gpt-5-chat-latest';
+    const maxTokens = getServerEnvInt('OPENAI_CHAT_MAX_TOKENS', 4000);
 
     const client = getOpenAIClient();
     const systemPrompt = buildIntakeSystemPrompt(
@@ -287,7 +285,7 @@ export async function POST(request: NextRequest) {
     const completion = await client.chat.completions.create({
       model,
       temperature: 0.4,
-      max_tokens: 1800,
+      max_tokens: maxTokens,
       messages: [
         { role: 'system', content: systemPrompt },
         ...historyMessages,
@@ -311,4 +309,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to process intake chat' }, { status: 500 });
   }
 }
-
